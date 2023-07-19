@@ -1,1 +1,1 @@
-# vrf-lootbox
+# vrf-lootbox-contracts
