@@ -1,6 +1,5 @@
-require("@nomicfoundation/hardhat-toolbox");
+require('@nomicfoundation/hardhat-toolbox');
 
-/** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: {
     version: '0.8.20',
@@ -16,7 +15,7 @@ module.exports = {
       },
     },
     mainnet: {
-      url: process.env.MAINNET_URL || '',
+      url: process.env.MAINNET_URL || 'https://cloudflare-eth.com',
       accounts:
         process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
     },

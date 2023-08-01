@@ -62,6 +62,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   uint private constant LINK_UNIT = 1e18;
 
   uint public unitsSupply;
+  EnumerableSet.UintSet private lootboxTypes;
   EnumerableSet.AddressSet private suppliers;
   EnumerableSet.AddressSet private allowedTokens; // Tokens allowed for rewards.
   EnumerableSet.AddressSet private inventory; // Tokens available for rewards.
@@ -204,6 +205,9 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   /// @notice Not enough gas is provided for opening
   error InsufficientGas();
 
+  /// @notice Lootbox id represents the number of rewrad units it will produce, so it should be > 0 and < 256
+  error InvalidLootboxType();
+
   /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
   //////////////////////////////////////////////////////////////*/
@@ -340,7 +344,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     uint feePerUnit = FACTORY.feePerUnit(address(this));
     uint feeInLink = feePerUnit * unitsToGet * LINK_UNIT / linkPrice;
     if (_amount < feeInLink) revert InsufficientFee();
-    IERC20(address(LINK)).safeTransfer(address(FACTORY), feeInLink);
+    LINK.transferAndCall(address(FACTORY), feeInLink, '');
     if (_amount > feeInLink) {
       IERC20(address(LINK)).safeTransfer(_opener, _amount - feeInLink);
     }
@@ -353,7 +357,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   function open(uint32 _gas, uint[] calldata _lootIds, uint[] calldata _lootAmounts) external payable whenNotPaused() {
     uint vrfPrice = VRF_V2_WRAPPER.calculateRequestPrice(_gas);
     uint linkPrice = _getLinkPrice();
-    uint vrfPriceNative = vrfPrice * linkPrice / 1e18;
+    uint vrfPriceNative = vrfPrice * linkPrice / LINK_UNIT;
     if (msg.value < vrfPriceNative) revert InsufficientPayment();
     uint payment = msg.value - vrfPriceNative;
     address opener = _msgSender();
@@ -435,6 +439,10 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     RewardInfo rewardInfo;
     uint balance;
     ExtraRewardInfo[] extra;
+  }
+
+  function getLootboxTypes() external view returns (uint[] memory) {
+    return lootboxTypes.values();
   }
 
   function getAllowedTokens() external view returns (address[] memory) {
@@ -836,12 +844,12 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     }
   }
 
-  function units(RewardInfo rewardInfo) internal pure returns (uint) {
-    return RewardInfo.unwrap(rewardInfo) >> UNITS_OFFSET;
+  function units(RewardInfo _rewardInfo) internal pure returns (uint) {
+    return RewardInfo.unwrap(_rewardInfo) >> UNITS_OFFSET;
   }
 
-  function amountPerUnit(RewardInfo rewardInfo) internal pure returns (uint) {
-    return uint184(RewardInfo.unwrap(rewardInfo));
+  function amountPerUnit(RewardInfo _rewardInfo) internal pure returns (uint) {
+    return uint184(RewardInfo.unwrap(_rewardInfo));
   }
 
   function toInfo(uint _units, uint _amountPerUnit) internal pure returns (RewardInfo) {
@@ -850,8 +858,8 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     return RewardInfo.wrap(uint248((_units << UNITS_OFFSET) | _amountPerUnit));
   }
 
-  function isEmpty(RewardInfo rewardInfo) internal pure returns (bool) {
-    return RewardInfo.unwrap(rewardInfo) == 0;
+  function isEmpty(RewardInfo _rewardInfo) internal pure returns (bool) {
+    return RewardInfo.unwrap(_rewardInfo) == 0;
   }
 
   function _not(bool _value) internal pure returns (bool) {
@@ -869,5 +877,24 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     returns (bool)
   {
     return super.supportsInterface(interfaceId);
+  }
+
+  function _beforeTokenTransfer(
+    address operator,
+    address from,
+    address to,
+    uint256[] memory ids,
+    uint256[] memory amounts,
+    bytes memory data
+  ) internal virtual override(ERC1155PresetMinterPauser) {
+    if (from == address(0)) {
+      uint len = ids.length;
+      for (uint i = 0; i < len; ++i) {
+        uint id = ids[i];
+        if (id == 0 || id > type(uint8).max) revert InvalidLootboxType();
+        lootboxTypes.add(id);
+      }
+    }
+    super._beforeTokenTransfer(operator, from, to, ids, amounts, data);
   }
 }
