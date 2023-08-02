@@ -9,7 +9,6 @@ import {ERC677ReceiverInterface} from '@chainlink/contracts/src/v0.8/interfaces/
 import {ILootboxFactory} from './interfaces/ILootboxFactory.sol';
 import {Lootbox} from './Lootbox.sol';
 
-/// TODO: Reduce contract size.
 /// @title Lootbox Factory
 /// @author ChainSafe Systems.
 /// @notice Contract that deploys lootbox contracts and manages fees.
@@ -22,6 +21,7 @@ contract LootboxFactory is ILootboxFactory, ERC677ReceiverInterface, Ownable {
 
   uint public feePerDeploy = 0;
   mapping(address lootbox => uint feePerUnit) private fees;
+  mapping(address deployer => mapping(uint id => address lootbox)) private lootboxes;
   
   event Payment(address lootbox, uint value);
   event PaymentLINK(address lootbox, uint amount);
@@ -41,9 +41,10 @@ contract LootboxFactory is ILootboxFactory, ERC677ReceiverInterface, Ownable {
     VRFV2WRAPPER = _vrfV2Wrapper;
   }
 
-  function deployLootbox(string calldata _uri) external payable returns (address) {
+  function deployLootbox(string calldata _uri, uint _id) external payable returns (address) {
     if (msg.value < feePerDeploy) revert InsufficientPayment();
-    address lootbox = address(new Lootbox(LINK, VRFV2WRAPPER, _uri, _msgSender()));
+    address lootbox = address(new Lootbox{salt: bytes32(_id)}(LINK, VRFV2WRAPPER, _uri, _msgSender()));
+    lootboxes[_msgSender()][_id] = lootbox;
     emit Deployed(lootbox, _msgSender(), msg.value);
     return lootbox;
   }
@@ -86,5 +87,9 @@ contract LootboxFactory is ILootboxFactory, ERC677ReceiverInterface, Ownable {
   function onTokenTransfer(address _lootbox, uint _amount, bytes calldata) external override {
     if (msg.sender != LINK) revert AcceptingOnlyLINK();
     emit PaymentLINK(_lootbox, _amount);
+  }
+
+  function getLootbox(address _deployer, uint _id) external view returns (address) {
+    return lootboxes[_deployer][_id];
   }
 }

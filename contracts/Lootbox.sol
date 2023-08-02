@@ -354,7 +354,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   /// @param _gas Gas limit for allocation
   /// @param _lootIds Lootbox ids to open
   /// @param _lootAmounts Lootbox amounts to open
-  function open(uint32 _gas, uint[] calldata _lootIds, uint[] calldata _lootAmounts) external payable whenNotPaused() {
+  function open(uint32 _gas, uint[] calldata _lootIds, uint[] calldata _lootAmounts) external payable {
     uint vrfPrice = VRF_V2_WRAPPER.calculateRequestPrice(_gas);
     uint linkPrice = _getLinkPrice();
     uint vrfPriceNative = vrfPrice * linkPrice / LINK_UNIT;
@@ -391,6 +391,9 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
       }
       else {
         uint tokenIds = allocationInfo[_opener][token].ids.length();
+        if (tokenIds == 0) {
+          continue;
+        }
         for (uint j = tokenIds - 1; j >= 0; --j) {
           uint tokenId = allocationInfo[_opener][token].ids.at(j);
           allocationInfo[_opener][token].ids.remove(tokenId);
@@ -412,7 +415,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     }
   }
 
-  function recoverBoxes(address _opener) external whenNotPaused() {
+  function recoverBoxes(address _opener) external {
     uint requestId = openerRequests[_opener];
     if (requestId == 0) revert NothingToRecover();
     if (requests[requestId].unitsToGet > 0) revert PendingOpenRequest();

@@ -1,6 +1,8 @@
 {
   "name": "vrf-lootbox-contracts",
   "scripts": {
+    "node": "hardhat node",
+    "hardhat": "hardhat",
     "test": "hardhat test",
     "compile": "hardhat compile"
   },
