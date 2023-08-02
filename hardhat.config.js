@@ -6,6 +6,14 @@ const assert = (condition, message) => {
   throw new Error(message);
 }
 
+async function deploy(contractName, signer, ...params) {
+  const factory = await ethers.getContractFactory(contractName);
+  const instance = await factory.connect(signer).deploy(...params);
+  await instance.deployed();
+  console.log(`${contractName} deployed to: ${instance.address}`);
+  return instance;
+}
+
 task('deploy-factory', 'Deploys LootboxFactory')
 .setAction(async () => {
   const { chainId } = network.config;
@@ -25,9 +33,9 @@ task('deploy-factory', 'Deploys LootboxFactory')
 
 // All following tasks are for testing and development purpuses only.
 
-task('deploy-lootbox', 'Deploys an ERC1155 Lootbox through a factory')
+task('deploy-lootbox', 'Deploys an ERC1155 Lootbox through a factory along with the reward tokens')
 .addOptionalParam('factory', 'LootboxFactory address')
-.addOptionalParam('uri', 'Lootbox metadata URI', '') // TODO: Add a default metadata URI.
+.addOptionalParam('uri', 'Lootbox metadata URI', 'https://bafybeicxxp4o5vxpesym2cvg4cqmxnwhwgpqawhhvxttrz2dlpxjyiob64.ipfs.nftstorage.link/{id}')
 .addOptionalParam('id', 'Lootbox id for contract address predictability', '0')
 .addOptionalParam('linkamount', 'Amount of LINK to transfer to lootbox', '100')
 .setAction(async ({ factory, uri, id, linkamount }) => {
@@ -35,7 +43,7 @@ task('deploy-lootbox', 'Deploys an ERC1155 Lootbox through a factory')
   const { chainId } = network.config;
   assert(chainId, 'Missing network configuration!');
 
-  const [deployer] = await ethers.getSigners();
+  const [deployer, supplier] = await ethers.getSigners();
 
   const { linkToken, linkHolder } = networkConfig[chainId];
   const link = await ethers.getContractAt('IERC20', linkToken);
@@ -53,10 +61,27 @@ task('deploy-lootbox', 'Deploys an ERC1155 Lootbox through a factory')
   await (await lootboxFactory.deployLootbox(uri, id)).wait();
   const lootboxAddress = await lootboxFactory.getLootbox(deployer.address, id);
 
-  console.log('Lootbox deployed to:', lootboxAddress, network.name);
+  console.log('Lootbox deployed to:', lootboxAddress);
   await(await link.connect(deployer)
     .transfer(lootboxAddress, ethers.utils.parseUnits(linkamount))).wait();
   console.log(`Transferred ${linkamount} LINK to the lootbox contract.`);
+
+  const lootbox = await ethers.getContractAt('Lootbox', lootboxAddress);
+  await (await lootbox.addSuppliers([supplier.address])).wait();
+  console.log(`Supplier ${supplier.address} added to the lootbox contract.`);
+
+  const erc20 = await deploy('MockERC20', supplier, 100000);
+  const erc721 = await deploy('MockERC721', supplier, 20);
+  const erc1155 = await deploy('MockERC1155', supplier, 10, 1000);
+  const erc1155NFT = await deploy('MockERC1155NFT', supplier, 15);
+
+  await (await lootbox.connect(deployer).addTokens([
+    erc20.address,
+    erc721.address,
+    erc1155.address,
+    erc1155NFT.address,
+  ])).wait();
+  console.log('Allowed tokens to be used as rewards in the lootbox contract.');
 });
 
 module.exports = {
