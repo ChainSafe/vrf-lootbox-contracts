@@ -1,5 +1,6 @@
 require('@nomicfoundation/hardhat-toolbox');
 const networkConfig = require('./network.config.js');
+const util = require('node:util');
 
 const assert = (condition, message) => {
   if (condition) return;
@@ -12,6 +13,14 @@ async function deploy(contractName, signer, ...params) {
   await instance.deployed();
   console.log(`${contractName} deployed to: ${instance.address}`);
   return instance;
+}
+
+async function getContract(contractName, deployer, nonce) {
+  const predictedAddress = ethers.utils.getContractAddress({
+    from: deployer.address,
+    nonce,
+  });
+  return await ethers.getContractAt(contractName, predictedAddress);
 }
 
 task('deploy-factory', 'Deploys LootboxFactory')
@@ -31,13 +40,13 @@ task('deploy-factory', 'Deploys LootboxFactory')
   // TODO: Add etherscan verification step.
 });
 
-// All following tasks are for testing and development purpuses only.
+// All the following tasks are for testing and development purpuses only.
 
 task('deploy-lootbox', 'Deploys an ERC1155 Lootbox through a factory along with the reward tokens')
 .addOptionalParam('factory', 'LootboxFactory address')
 .addOptionalParam('uri', 'Lootbox metadata URI', 'https://bafybeicxxp4o5vxpesym2cvg4cqmxnwhwgpqawhhvxttrz2dlpxjyiob64.ipfs.nftstorage.link/{id}')
-.addOptionalParam('id', 'Lootbox id for contract address predictability', '0')
-.addOptionalParam('linkamount', 'Amount of LINK to transfer to lootbox', '100')
+.addOptionalParam('id', 'Lootbox id for contract address predictability', 0, types.int)
+.addOptionalParam('linkamount', 'Amount of LINK to transfer to lootbox', 100, types.int)
 .setAction(async ({ factory, uri, id, linkamount }) => {
   assert(network.name == 'localhost', 'Only for testing');
   const { chainId } = network.config;
@@ -63,7 +72,7 @@ task('deploy-lootbox', 'Deploys an ERC1155 Lootbox through a factory along with 
 
   console.log('Lootbox deployed to:', lootboxAddress);
   await(await link.connect(deployer)
-    .transfer(lootboxAddress, ethers.utils.parseUnits(linkamount))).wait();
+    .transfer(lootboxAddress, ethers.utils.parseUnits(linkamount.toString()))).wait();
   console.log(`Transferred ${linkamount} LINK to the lootbox contract.`);
 
   const lootbox = await ethers.getContractAt('Lootbox', lootboxAddress);
@@ -82,6 +91,210 @@ task('deploy-lootbox', 'Deploys an ERC1155 Lootbox through a factory along with 
     erc1155NFT.address,
   ])).wait();
   console.log('Allowed tokens to be used as rewards in the lootbox contract.');
+});
+
+task('supply-rewards', 'Transfer rewards to the previously deployed lootbox contract')
+.addOptionalParam('factory', 'LootboxFactory address')
+.addOptionalParam('id', 'Lootbox id for contract address predictability', 0, types.int)
+.addOptionalParam('type', 'Reward token type, ERC20, ERC721, ERC1155 or ERC1155NFT', 'ERC721')
+.addOptionalParam('tokenid', 'Reward token id, not needed for ERC20', 0, types.int)
+.addOptionalParam('amount', 'Reward token amount, not needed for ERC721 and ERC1155NFT', 1, types.int)
+.setAction(async ({ factory, id, type, tokenid, amount }) => {
+  assert(network.name == 'localhost', 'Only for testing');
+  const { chainId } = network.config;
+  assert(chainId, 'Missing network configuration!');
+
+  const [deployer, supplier] = await ethers.getSigners();
+
+  const predictedAddress = ethers.utils.getContractAddress({
+    from: deployer.address,
+    nonce: 0,
+  });
+  factory = factory || predictedAddress;
+
+  const erc20 = await getContract('MockERC20', supplier, 0);
+  const erc721 = await getContract('MockERC721', supplier, 1);
+  const erc1155 = await getContract('MockERC1155', supplier, 2);
+  const erc1155NFT = await getContract('MockERC1155NFT', supplier, 3);
+
+  const lootboxFactory = await ethers.getContractAt('LootboxFactory', factory);
+  const lootboxAddress = await lootboxFactory.getLootbox(deployer.address, id);
+
+  if (type == 'ERC20') {
+    await (await erc20.connect(supplier).transfer(lootboxAddress, amount)).wait();
+  } else if (type == 'ERC721') {
+    await (await erc721.connect(supplier)['safeTransferFrom(address,address,uint256)'](supplier.address, lootboxAddress, tokenid)).wait();
+  } else if (type == 'ERC1155') {
+    assert(amount > 1, 'ERC1155 should be transferred in amount > 1 to not make it ERC1155NFT in the lootbox contract.');
+    await (await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootboxAddress, tokenid, amount, '0x')).wait();
+  } else if (type == 'ERC1155NFT') {
+    await (await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootboxAddress, tokenid, 1, '0x')).wait();
+  } else {
+    throw new Error(`Unexpected reward type: ${type}`);
+  }
+
+  console.log(`Rewards supplied ${type}.`);
+});
+
+task('set-amountperunit', 'Set amount per unit of reward for a reward token')
+.addOptionalParam('factory', 'LootboxFactory address')
+.addOptionalParam('id', 'Lootbox id for contract address predictability', 0, types.int)
+.addOptionalParam('type', 'Reward token type, ERC20, ERC721, ERC1155 or ERC1155NFT', 'ERC721')
+.addOptionalParam('tokenid', 'Reward token id, not needed for ERC20', 0, types.int)
+.addOptionalParam('amountperunit', 'Reward token amount per reward unit', 1, types.int)
+.setAction(async ({ factory, id, type, tokenid, amountperunit }) => {
+  assert(network.name == 'localhost', 'Only for testing');
+  const { chainId } = network.config;
+  assert(chainId, 'Missing network configuration!');
+
+  const [deployer, supplier] = await ethers.getSigners();
+
+  const predictedAddress = ethers.utils.getContractAddress({
+    from: deployer.address,
+    nonce: 0,
+  });
+  factory = factory || predictedAddress;
+
+  const erc20 = await getContract('MockERC20', supplier, 0);
+  const erc721 = await getContract('MockERC721', supplier, 1);
+  const erc1155 = await getContract('MockERC1155', supplier, 2);
+  const erc1155NFT = await getContract('MockERC1155NFT', supplier, 3);
+
+  const lootboxFactory = await ethers.getContractAt('LootboxFactory', factory);
+  const lootboxAddress = await lootboxFactory.getLootbox(deployer.address, id);
+  const lootbox = await ethers.getContractAt('Lootbox', lootboxAddress);
+
+  let tokenAddress;
+  if (type == 'ERC20') {
+    tokenAddress = erc20.address;
+  } else if (type == 'ERC721') {
+    tokenAddress = erc721.address;
+  } else if (type == 'ERC1155') {
+    tokenAddress = erc1155.address;
+  } else if (type == 'ERC1155NFT') {
+    tokenAddress = erc1155NFT.address;
+  } else {
+    throw new Error(`Unexpected reward type: ${type}`);
+  }
+  const oldSupply = await lootbox.unitsSupply();
+  await (await lootbox.connect(deployer).setAmountsPerUnit([tokenAddress], [tokenid], [amountperunit])).wait();
+  const newSupply = await lootbox.unitsSupply();
+
+  console.log(`Amount per unit updates. Old supply: ${oldSupply} new supply: ${newSupply}`);
+});
+
+task('mint', 'Mint lootboxes')
+.addOptionalParam('factory', 'LootboxFactory address')
+.addOptionalParam('id', 'Lootbox id for contract address predictability', 0, types.int)
+.addOptionalParam('user', 'User address that will receive lootboxes')
+.addOptionalParam('tokenid', 'Token id that represents how many reward units each box will produce', 1, types.int)
+.addOptionalParam('amount', 'How many lootboxes to mint', 5, types.int)
+.setAction(async ({ factory, id, user: userAddr, tokenid, amount }) => {
+  assert(network.name == 'localhost', 'Only for testing');
+  const { chainId } = network.config;
+  assert(chainId, 'Missing network configuration!');
+
+  const [deployer, supplier, user] = await ethers.getSigners();
+
+  const predictedAddress = ethers.utils.getContractAddress({
+    from: deployer.address,
+    nonce: 0,
+  });
+  factory = factory || predictedAddress;
+
+  userAddr = userAddr || user.address;
+
+  const lootboxFactory = await ethers.getContractAt('LootboxFactory', factory);
+  const lootboxAddress = await lootboxFactory.getLootbox(deployer.address, id);
+  const lootbox = await ethers.getContractAt('Lootbox', lootboxAddress);
+
+  await (await lootbox.connect(deployer)
+    .mint(userAddr, tokenid, amount, '0x')).wait();
+
+  console.log(`${amount} lootboxes worth of ${tokenid} reward units each minted to ${userAddr}`);
+});
+
+task('fulfill', 'Set amount per unit of reward for a reward token')
+.addOptionalParam('factory', 'LootboxFactory address')
+.addOptionalParam('id', 'Lootbox id for contract address predictability', 0, types.int)
+.addOptionalParam('user', 'User address that requested to open something')
+.addOptionalParam('gas', 'Fulfillment gas limit', 2500000, types.int)
+.setAction(async ({ factory, id, user: userAddr }) => {
+  assert(network.name == 'localhost', 'Only for testing');
+  const { chainId } = network.config;
+  assert(chainId, 'Missing network configuration!');
+  const { vrfV2Wrapper } = networkConfig[chainId];
+
+  const [deployer, supplier, user] = await ethers.getSigners();
+
+  const predictedAddress = ethers.utils.getContractAddress({
+    from: deployer.address,
+    nonce: 0,
+  });
+  factory = factory || predictedAddress;
+
+  userAddr = userAddr || user.address;
+
+  const lootboxFactory = await ethers.getContractAt('LootboxFactory', factory);
+  const lootboxAddress = await lootboxFactory.getLootbox(deployer.address, id);
+  const lootbox = await ethers.getContractAt('Lootbox', lootboxAddress);
+  const requestId = await lootbox.openerRequests(userAddr);
+  assert(requestId.gt('0'), `Open request not found for user ${userAddr}`);
+
+  const impersonatedVRFWrapper = await ethers.getImpersonatedSigner(vrfV2Wrapper);
+  const randomWord = ethers.BigNumber.from(ethers.utils.randomBytes(32));
+  await (await link.connect(impersonatedVRFWrapper)
+    .rawFulfillRandomWords(requestId, [randomWord], { gasLimit: gas })).wait();
+
+  const requestIdAfter = await lootbox.openerRequests(userAddr);
+  assert(requestId.eq('0'), `Randomness fulfillment ran out of gas`);
+
+  console.log(`Randomness fulfilled successfully`);
+});
+
+task('inventory', 'Get inventory')
+.addOptionalParam('factory', 'LootboxFactory address')
+.addOptionalParam('id', 'Lootbox id for contract address predictability', 0, types.int)
+.setAction(async ({ factory, id }) => {
+  assert(network.name == 'localhost', 'Only for testing');
+  const { chainId } = network.config;
+  assert(chainId, 'Missing network configuration!');
+
+  const [deployer, supplier] = await ethers.getSigners();
+
+  const predictedAddress = ethers.utils.getContractAddress({
+    from: deployer.address,
+    nonce: 0,
+  });
+  factory = factory || predictedAddress;
+
+  const lootboxFactory = await ethers.getContractAt('LootboxFactory', factory);
+  const lootboxAddress = await lootboxFactory.getLootbox(deployer.address, id);
+  const lootbox = await ethers.getContractAt('Lootbox', lootboxAddress);
+
+  const inventory = await lootbox.getInventory();
+  console.log(util.inspect(inventory.result, false, null, true));
+  console.log(util.inspect(inventory.leftoversResult, false, null, true));
+});
+
+task('devsetup', 'Do everything')
+.setAction(async (taskArgs, hre) => {
+  await hre.run('deploy-factory');
+  await hre.run('deploy-lootbox');
+  await hre.run('supply-rewards', { tokenid: 5 });
+  await hre.run('supply-rewards', { tokenid: 1 });
+  await hre.run('supply-rewards', { tokenid: 9 });
+  await hre.run('supply-rewards', { type: 'ERC1155', tokenid: 3, amount: 50 });
+  await hre.run('supply-rewards', { type: 'ERC1155', tokenid: 3, amount: 70 });
+  await hre.run('supply-rewards', { type: 'ERC1155', tokenid: 4, amount: 150 });
+  await hre.run('supply-rewards', { type: 'ERC1155NFT', tokenid: 2 });
+  await hre.run('supply-rewards', { type: 'ERC1155NFT', tokenid: 6 });
+  await hre.run('supply-rewards', { type: 'ERC20', amount: 1000 });
+  await hre.run('set-amountperunit', { type: 'ERC20', amountperunit: 30 });
+  await hre.run('set-amountperunit', { type: 'ERC1155', tokenid: 3, amountperunit: 35 });
+  await hre.run('set-amountperunit', { type: 'ERC1155', tokenid: 4, amountperunit: 50 });
+  await hre.run('mint');
+  await hre.run('inventory');
 });
 
 module.exports = {

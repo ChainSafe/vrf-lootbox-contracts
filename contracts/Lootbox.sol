@@ -93,7 +93,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   mapping(uint256 => Request) private requests;
 
   /// @notice The VRF request IDs and their corresponding openers
-  mapping(address => uint256) private openerRequests;
+  mapping(address => uint256) public openerRequests;
 
   /*//////////////////////////////////////////////////////////////
                                 EVENTS
@@ -259,7 +259,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     }
   }
 
-  function setAmountPerUnit(address[] calldata _tokens, uint[] calldata _ids, uint[] calldata _amountsPerUnit) external onlyRole(DEFAULT_ADMIN_ROLE) {
+  function setAmountsPerUnit(address[] calldata _tokens, uint[] calldata _ids, uint[] calldata _amountsPerUnit) external onlyRole(DEFAULT_ADMIN_ROLE) {
     if (_tokens.length != _ids.length || _tokens.length != _amountsPerUnit.length) revert InvalidLength();
     uint currentSupply = unitsSupply;
     for (uint i = 0; i < _tokens.length; ++i) {
@@ -432,14 +432,16 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
 
   struct ExtraRewardInfo {
     uint id;
-    RewardInfo rewardInfo;
+    uint units;
+    uint amountPerUnit;
     uint balance;
   }
 
   struct RewardView {
     address rewardToken;
     RewardType rewardType;
-    RewardInfo rewardInfo;
+    uint units;
+    uint amountPerUnit;
     uint balance;
     ExtraRewardInfo[] extra;
   }
@@ -464,6 +466,14 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     return suppliers.contains(_from);
   }
 
+  function calculateOpenPrice(uint32 _gas, uint _units) external view returns (uint) {
+    uint vrfPrice = VRF_V2_WRAPPER.calculateRequestPrice(_gas);
+    uint linkPrice = _getLinkPrice();
+    uint vrfPriceNative = vrfPrice * linkPrice / LINK_UNIT;
+    uint feePerUnit = FACTORY.feePerUnit(address(this));
+    return vrfPriceNative + (_units * feePerUnit);
+  }
+
   /// @notice Returns the tokens and amounts per unit of the lootbox
   /// @return result The list of rewards available for getting
   /// @return leftoversResult The list of rewards that are not configured or has insufficient supply
@@ -475,9 +485,10 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
       result[i].rewardToken = token;
       RewardType rewardType = rewards[token].rewardType;
       result[i].rewardType = rewardType;
-      result[i].rewardInfo = rewards[token].rewardInfo;
+      result[i].units = units(rewards[token].rewardInfo);
+      result[i].amountPerUnit = amountPerUnit(rewards[token].rewardInfo);
       if (rewardType == RewardType.ERC20) {
-        result[i].balance = units(result[i].rewardInfo) * amountPerUnit(result[i].rewardInfo);
+        result[i].balance = result[i].units * result[i].amountPerUnit;
       }
       uint ids = rewards[token].ids.length();
       result[i].extra = new ExtraRewardInfo[](ids);
@@ -485,22 +496,29 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
         uint id = rewards[token].ids.at(j);
         result[i].extra[j].id = id;
         if (rewardType == RewardType.ERC1155) {
-          result[i].extra[j].rewardInfo = rewards[token].extraInfo[id];
-          result[i].extra[j].balance = units(result[i].extra[j].rewardInfo) * amountPerUnit(result[i].extra[j].rewardInfo);
+          result[i].extra[j].units = units(rewards[token].extraInfo[id]);
+          result[i].extra[j].amountPerUnit = amountPerUnit(rewards[token].extraInfo[id]);
+          result[i].extra[j].balance = result[i].extra[j].units * result[i].extra[j].amountPerUnit;
         }
       }
     }
 
     tokens = allowedTokens.length();
     leftoversResult = new RewardView[](tokens);
+    uint k = 0;
     for (uint i = 0; i < tokens; ++i) {
       address token = allowedTokens.at(i);
-      leftoversResult[i].rewardToken = token;
+      leftoversResult[k].rewardToken = token;
       RewardType rewardType = rewards[token].rewardType;
-      leftoversResult[i].rewardType = rewardType;
-      leftoversResult[i].rewardInfo = rewards[token].rewardInfo;
+      leftoversResult[k].rewardType = rewardType;
+      leftoversResult[k].amountPerUnit = amountPerUnit(rewards[token].rewardInfo);
       if (rewardType == RewardType.ERC20 || rewardType == RewardType.UNSET) {
-        leftoversResult[i].balance = tryBalanceOfThis(token) - allocated[token][0];
+        leftoversResult[k].balance =
+          tryBalanceOfThis(token) - allocated[token][0]
+          - (units(rewards[token].rewardInfo) * leftoversResult[k].amountPerUnit);
+        if (leftoversResult[k].balance > 0) {
+          ++k;
+        }
         continue;
       }
       if (rewardType == RewardType.ERC721 || rewardType == RewardType.ERC1155NFT) {
@@ -511,18 +529,27 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
       EnumerableSet.UintSet storage tokenIds =
         (rewardType == RewardType.ERC1155) ? leftoversExtraIds[token] : rewards[token].ids;
       uint ids = tokenIds.length();
-      leftoversResult[i].extra = new ExtraRewardInfo[](ids);
+      leftoversResult[k].extra = new ExtraRewardInfo[](ids);
       for (uint j = 0; j < ids; ++j) {
         uint id = tokenIds.at(j);
-        leftoversResult[i].extra[j].id = id;
+        leftoversResult[k].extra[j].id = id;
         if (rewardType == RewardType.ERC1155) {
-          leftoversResult[i].extra[j].rewardInfo = rewards[token].extraInfo[id];
-          leftoversResult[i].extra[j].balance = IERC1155(token).balanceOf(address(this), id) - allocated[token][id];
+          leftoversResult[k].extra[j].amountPerUnit = amountPerUnit(rewards[token].extraInfo[id]);
+          leftoversResult[k].extra[j].balance =
+            IERC1155(token).balanceOf(address(this), id) - allocated[token][id]
+            - (units(rewards[token].extraInfo[id]) * leftoversResult[k].extra[j].amountPerUnit);
         }
       }
+      ++k;
+    }
+    // Shrink the leftovers array to its actual size.
+    assembly {
+      mstore(leftoversResult, k)
     }
     return (result, leftoversResult);
   }
+
+  // TODO: Add a function to list user allocation.
 
   /// @notice Returns whether the rewards for the given opener can be claimed
   /// @param _opener The address of the user that opened the lootbox
@@ -600,6 +627,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     }
   }
 
+  // TODO: Deal with the ERC721 sent through simple transferFrom, instead of safeTransferFrom.
   function _setAmountPerUnit(uint _currentSupply, address _token, uint _id, uint _amountPerUnit) internal returns (uint) {
     if (_not(tokenAllowed(_token))) revert TokenDenied(_token);
     RewardInfo rewardInfo = rewards[_token].rewardInfo;
@@ -614,20 +642,23 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     uint unitsOld = units(rewardInfo);
     uint unitsNew;
     if (rewardType == RewardType.ERC20) {
-      unitsNew = (IERC20(_token).balanceOf(address(this)) - allocated[_token][0]) / _amountPerUnit;
+      unitsNew = _amountPerUnit == 0 ? 0 : (IERC20(_token).balanceOf(address(this)) - allocated[_token][0]) / _amountPerUnit;
       rewardInfo = toInfo(unitsNew, _amountPerUnit);
     } else if (rewardType == RewardType.ERC721 || rewardType == RewardType.ERC1155NFT) {
-      unitsNew = rewards[_token].ids.length() / _amountPerUnit;
+      unitsNew = _amountPerUnit == 0 ? 0 : rewards[_token].ids.length() / _amountPerUnit;
       rewardInfo = toInfo(unitsNew, _amountPerUnit);
     } else if (rewardType == RewardType.ERC1155) {
       RewardInfo extraInfo = rewards[_token].extraInfo[_id];
       uint tokenUnitsOld = units(extraInfo);
-      uint tokenUnitsNew = (IERC1155(_token).balanceOf(address(this), _id) - allocated[_token][_id]) / _amountPerUnit;
+      uint balance = IERC1155(_token).balanceOf(address(this), _id) - allocated[_token][_id];
+      uint tokenUnitsNew = _amountPerUnit == 0 ? 0 : balance / _amountPerUnit;
       rewards[_token].extraInfo[_id] = toInfo(tokenUnitsNew, _amountPerUnit);
       unitsNew = unitsOld - tokenUnitsOld + tokenUnitsNew;
       rewardInfo = toInfo(unitsNew, amountPerUnit(rewardInfo));
       if (tokenUnitsNew > 0) {
-        leftoversExtraIds[_token].remove(_id);
+        if (balance % _amountPerUnit == 0) {
+          leftoversExtraIds[_token].remove(_id);
+        }
         rewards[_token].ids.add(_id);
       } else {
         rewards[_token].ids.remove(_id);
@@ -657,7 +688,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     if (value == 0) revert ZeroSupply(token, id);
     RewardInfo rewardInfo = rewards[token].rewardInfo;
     RewardType rewardType = rewards[token].rewardType;
-    bool isFirstTime = rewards[token].rewardType == RewardType.UNSET;
+    bool isFirstTime = rewardType == RewardType.UNSET;
     if (isFirstTime) {
       if (value == 1) {
         // If the value is 1, then we assume token to be distributed as NFT.
@@ -668,7 +699,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
         rewardType = RewardType.ERC1155;
       }
       rewards[token].rewardType = rewardType;
-    } else if (rewardType != RewardType.ERC1155 || rewardType != RewardType.ERC1155NFT) {
+    } else if (rewardType != RewardType.ERC1155 && rewardType != RewardType.ERC1155NFT) {
       revert ModifiedRewardType(rewards[token].rewardType, RewardType.ERC1155);
     }
     if (rewardType == RewardType.ERC1155) {
@@ -767,7 +798,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     uint256 totalUnits = unitsSupply;
     unitsSupply = totalUnits - unitsToGet;
 
-    for (; unitsToGet >= 0; --unitsToGet) {
+    for (; unitsToGet > 0; --unitsToGet) {
       uint256 target = uint256(keccak256(abi.encodePacked(_randomness, unitsToGet))) % totalUnits;
       uint256 offset = 0;
 
