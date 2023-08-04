@@ -32,6 +32,7 @@ contract LootboxFactory is ILootboxFactory, ERC677ReceiverInterface, Ownable {
 
   error InsufficientPayment();
   error AcceptingOnlyLINK();
+  error AlreadyDeployed();
 
   constructor(
     address _link,
@@ -43,6 +44,7 @@ contract LootboxFactory is ILootboxFactory, ERC677ReceiverInterface, Ownable {
 
   function deployLootbox(string calldata _uri, uint _id) external payable returns (address) {
     if (msg.value < feePerDeploy) revert InsufficientPayment();
+    if (lootboxes[_msgSender()][_id] != address(0)) revert AlreadyDeployed();
     address lootbox = address(new Lootbox{salt: bytes32(_id)}(LINK, VRFV2WRAPPER, _uri, _msgSender()));
     lootboxes[_msgSender()][_id] = lootbox;
     emit Deployed(lootbox, _msgSender(), msg.value);
