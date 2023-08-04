@@ -6,6 +6,10 @@
     npm install
     npm run compile
 
+## Docs
+
+    npm run hardhat docgen
+
 ## Usage
 
 By default everything is executed on the forked network, and no real transactions being sent.
