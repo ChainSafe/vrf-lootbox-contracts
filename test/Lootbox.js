@@ -112,4 +112,20 @@ describe('Lootbox', function () {
   it.skip('should list lootbox types', async function () {});
 
   it.skip('should calculate open price based on the gas, VRF and LINK price and fee per unit', async function () {});
+
+  it.skip('should recover lootboxes from an own failed open request', async function () {});
+  it.skip('should recover lootboxes from another opener failed request', async function () {});
+  it.skip('should not recover lootboxes if there is no request for an opener', async function () {});
+  it.skip('should not recover lootboxes if the request is not failed for an opener', async function () {});
+  it.skip('should not recover lootboxes after a successful recovery', async function () {});
+
+  it.skip('should claim own allocated rewards', async function () {});
+  it.skip('should claim another opener allocated rewards', async function () {});
+  it.skip('should restrict claiming if paused', async function () {});
+  it.skip('should claim another opener allocated ERC20 rewards', async function () {});
+  it.skip('should claim another opener allocated ERC721 rewards', async function () {});
+  it.skip('should claim another opener allocated ERC1155 NFT rewards', async function () {});
+  it.skip('should claim another opener allocated ERC1155 rewards', async function () {});
+
+  it.skip('should restrict calling allocate rewards for not the contract itself', async function () {});
 });
