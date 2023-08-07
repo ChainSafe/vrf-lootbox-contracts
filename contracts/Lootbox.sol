@@ -908,7 +908,8 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     override(ERC1155Receiver, ERC1155PresetMinterPauser)
     returns (bool)
   {
-    return super.supportsInterface(interfaceId);
+    return ERC1155Receiver.supportsInterface(interfaceId) ||
+      ERC1155PresetMinterPauser.supportsInterface(interfaceId);
   }
 
   function _beforeTokenTransfer(

@@ -104,4 +104,12 @@ describe('Lootbox', function () {
   it.skip('should put resupplied multiple ERC1155 into leftovers if there is a remainder', async function () {});
   it.skip('should allow supplier to resupply multiple ERC1155 if this ID was already supplied', async function () {});
   it.skip('should restrict supplier to supply multiple ERC1155 with zero value', async function () {});
+
+  it.skip('should allow minter to mint lootboxes', async function () {});
+  it.skip('should restrict others to mint lootboxes', async function () {});
+  it.skip('should support IERC1155Receiver interface', async function () {});
+  it.skip('should support IERC1155 interface', async function () {});
+  it.skip('should list lootbox types', async function () {});
+
+  it.skip('should calculate open price based on the gas, VRF and LINK price and fee per unit', async function () {});
 });
