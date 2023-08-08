@@ -1,12 +1,30 @@
-const {
-  time,
-  loadFixture,
-} = require('@nomicfoundation/hardhat-network-helpers');
+const { loadFixture } = require('@nomicfoundation/hardhat-network-helpers');
 const { anyValue } = require('@nomicfoundation/hardhat-chai-matchers/withArgs');
 const { expect } = require('chai');
+const { linkToken, vrfV2Wrapper } = require('../network.config.js')['31337'];
 
 describe('LootboxFactory', function () {
-  it.skip('should deploy lootbox factory and have valid defaults', async function () {});
+  const deployFactory = async (linkAddress, wrapperAddress) => {
+    const lootboxFactoryFactory = await ethers.getContractFactory('LootboxFactory');
+    const lootboxFactory = await lootboxFactoryFactory.deploy(
+      linkAddress || linkToken,
+      wrapperAddress || vrfV2Wrapper
+    );
+    await lootboxFactory.deployed();
+    return lootboxFactory;
+  };
+
+  it('should deploy lootbox factory and have valid defaults', async function () {
+    const factory = await loadFixture(deployFactory);
+    expect(await factory.LINK()).to.equal(linkToken);
+    expect(await factory.VRFV2WRAPPER()).to.equal(vrfV2Wrapper);
+    expect(await factory.feePerDeploy()).to.equal(0);
+    expect(await factory.defaultFeePerUnit()).to.equal(0);
+    const [someone, another] = await ethers.getSigners();
+    const factory2 = await deployFactory(someone.address, another.address);
+    expect(await factory2.LINK()).to.equal(someone.address);
+    expect(await factory2.VRFV2WRAPPER()).to.equal(another.address);
+  });
   it.skip('should allow owner to set fee per deploy', async function () {});
   it.skip('should restrict others to set fee per deploy', async function () {});
   it.skip('should allow owner to set fee per unit', async function () {});

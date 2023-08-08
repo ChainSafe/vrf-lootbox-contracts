@@ -36,7 +36,7 @@ task('deploy-factory', 'Deploys LootboxFactory')
   const lootboxFactoryFactory = await ethers.getContractFactory('LootboxFactory');
   const lootboxFactory = await lootboxFactoryFactory.deploy(linkToken, vrfV2Wrapper);
   await lootboxFactory.deployed();
-  console.log('LootboxFactory deployed to:', lootboxFactory.address, network.name);
+  console.log(`LootboxFactory deployed by ${deployer.address} to: ${lootboxFactory.address} ${network.name}`);
 
   // TODO: Add etherscan verification step.
 });
@@ -359,6 +359,6 @@ module.exports = {
   docgen: {
     path: './docs',
     clear: true,
-    runOnCompile: true,
+    runOnCompile: false,
   }
 };

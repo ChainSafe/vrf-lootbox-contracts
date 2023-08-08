@@ -3,7 +3,7 @@
   "scripts": {
     "node": "hardhat node",
     "hardhat": "hardhat",
-    "test": "hardhat test",
+    "test": "hardhat --network hardhat test",
     "compile": "hardhat compile"
   },
   "devDependencies": {
