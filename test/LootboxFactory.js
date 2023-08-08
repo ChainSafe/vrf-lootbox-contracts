@@ -25,8 +25,28 @@ describe('LootboxFactory', function () {
     expect(await factory2.LINK()).to.equal(someone.address);
     expect(await factory2.VRFV2WRAPPER()).to.equal(another.address);
   });
-  it.skip('should allow owner to set fee per deploy', async function () {});
-  it.skip('should restrict others to set fee per deploy', async function () {});
+  it('should allow owner to set fee per deploy', async function () {
+    const factory = await loadFixture(deployFactory);
+    const [owner] = await ethers.getSigners();
+    await expect(factory.setFeePerDeploy(100))
+      .to.emit(factory, 'FeePerDeploySet')
+      .withArgs(100);
+    expect(await factory.feePerDeploy()).to.equal(100);
+    await expect(factory.setFeePerDeploy(200))
+      .to.emit(factory, 'FeePerDeploySet')
+      .withArgs(200);
+    expect(await factory.feePerDeploy()).to.equal(200);
+    await expect(factory.setFeePerDeploy(0))
+      .to.emit(factory, 'FeePerDeploySet')
+      .withArgs(0);
+    expect(await factory.feePerDeploy()).to.equal(0);
+  });
+  it('should restrict others to set fee per deploy', async function () {
+    const factory = await loadFixture(deployFactory);
+    const [_, other] = await ethers.getSigners();
+    await expect(factory.connect(other).setFeePerDeploy(100))
+      .to.be.revertedWith(/Ownable/);
+  });
   it.skip('should allow owner to set fee per unit', async function () {});
   it.skip('should restrict others to set fee per unit', async function () {});
   it.skip('should allow owner to set default fee per unit', async function () {});
