@@ -208,6 +208,9 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   /// @notice Lootbox id represents the number of rewrad units it will produce, so it should be > 0 and < 256
   error InvalidLootboxType();
 
+  /// @notice The request is either already failed/fulfilled or was never created
+  error InvalidRequestAllocation(uint requestId);
+
   /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
   //////////////////////////////////////////////////////////////*/
@@ -338,13 +341,14 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
       abi.decode(_gasAndLoot, (uint32, uint[], uint[]));
     uint vrfPrice = VRF_V2_WRAPPER.calculateRequestPrice(gas);
     if (_amount < vrfPrice) revert InsufficientPayment();
-    uint unitsToGet = _requestOpen(_opener, gas, lootIds, lootAmounts);
     _amount -= vrfPrice;
-    uint linkPrice = _getLinkPrice();
+    uint unitsToGet = _requestOpen(_opener, gas, lootIds, lootAmounts);
     uint feePerUnit = FACTORY.feePerUnit(address(this));
-    uint feeInLink = feePerUnit * unitsToGet * LINK_UNIT / linkPrice;
+    uint feeInLink = feePerUnit * unitsToGet * LINK_UNIT / _getLinkPrice();
     if (_amount < feeInLink) revert InsufficientFee();
-    LINK.transferAndCall(address(FACTORY), feeInLink, '');
+    if (feeInLink > 0) {
+      LINK.transferAndCall(address(FACTORY), feeInLink, '');
+    }
     if (_amount > feeInLink) {
       IERC20(address(LINK)).safeTransfer(_opener, _amount - feeInLink);
     }
@@ -356,8 +360,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   /// @param _lootAmounts Lootbox amounts to open
   function open(uint32 _gas, uint[] calldata _lootIds, uint[] calldata _lootAmounts) external payable {
     uint vrfPrice = VRF_V2_WRAPPER.calculateRequestPrice(_gas);
-    uint linkPrice = _getLinkPrice();
-    uint vrfPriceNative = vrfPrice * linkPrice / LINK_UNIT;
+    uint vrfPriceNative = vrfPrice * _getLinkPrice() / LINK_UNIT;
     if (msg.value < vrfPriceNative) revert InsufficientPayment();
     uint payment = msg.value - vrfPriceNative;
     address opener = _msgSender();
@@ -365,7 +368,9 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     uint feePerUnit = FACTORY.feePerUnit(address(this));
     uint feeInNative = feePerUnit * unitsToGet;
     if (payment < feeInNative) revert InsufficientFee();
-    payable(FACTORY).sendValue(feeInNative);
+    if (feeInNative > 0) {
+      payable(FACTORY).sendValue(feeInNative);
+    }
     if (payment > feeInNative) {
       payable(opener).sendValue(payment - feeInNative);
     }
@@ -793,6 +798,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     mapping(address => Lootbox.AllocationInfo) storage openerAllocation =
       allocationInfo[requests[_requestId].opener];
     uint unitsToGet = requests[_requestId].unitsToGet;
+    if (unitsToGet == 0) revert InvalidRequestAllocation(_requestId);
     delete requests[_requestId];
     delete openerRequests[requests[_requestId].opener];
     uint256 totalUnits = unitsSupply;
@@ -910,7 +916,8 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     override(ERC1155Receiver, ERC1155PresetMinterPauser)
     returns (bool)
   {
-    return super.supportsInterface(interfaceId);
+    return ERC1155Receiver.supportsInterface(interfaceId) ||
+      ERC1155PresetMinterPauser.supportsInterface(interfaceId);
   }
 
   function _beforeTokenTransfer(
