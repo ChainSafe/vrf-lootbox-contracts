@@ -4,6 +4,7 @@ coverage
 coverage.json
 typechain
 typechain-types
+.DS_Store
 
 #Hardhat files
 cache
@@ -20,4 +21,7 @@ typechain-types
 #Hardhat files
 cache
 artifacts
+
+#Docs
+docs
 
