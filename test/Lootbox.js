@@ -128,4 +128,58 @@ describe('Lootbox', function () {
   it.skip('should claim another opener allocated ERC1155 rewards', async function () {});
 
   it.skip('should restrict calling allocate rewards for not the contract itself', async function () {});
+  it.skip('should restrict calling raw fulfill random words for not the VRF_V2_WRAPPER', async function () {});
+  it.skip('should restrict rewards allocation for a failed request', async function () {});
+  it.skip('should restrict rewards allocation for an absent request', async function () {});
+  it.skip('should restrict rewards allocation for a fulfilled request', async function () {});
+
+  it.skip('should allow LINK as ERC677 transfer and call to create an open request', async function () {});
+  it.skip('should restrict other tokens as ERC677 transfer and call', async function () {});
+  it.skip('should restrict to create an open request with LINK payment less than VRF price', async function () {});
+  it.skip('should restrict to create an open request with LINK payment less than VRF price plus LINK factory fee', async function () {});
+  it.skip('should forward the open fee in LINK to the factory when creating an open request', async function () {});
+  it.skip('should not forward a zero fee in LINK to the factory when creating an open request', async function () {});
+  it.skip('should return the excess LINK to the opener when creating an open request', async function () {});
+
+  it.skip('should allow native currency payment to create an open request', async function () {});
+  it.skip('should restrict native currency deposit outside of open function', async function () {});
+  it.skip('should restrict to create an open request with native payment less than VRF native price', async function () {});
+  it.skip('should restrict to create an open request with native payment less than VRF native price plus factory fee', async function () {});
+  it.skip('should forward the native open fee to the factory when creating an open request', async function () {});
+  it.skip('should not forward a zero native fee in to the factory when creating an open request', async function () {});
+  it.skip('should return the excess native payment to the opener when creating an open request', async function () {});
+
+  describe('LINK payment', function() {
+    it.skip('should restrict more then one pending open request per opener', async function () {});
+    it.skip('should restrict open request with less than 100,000 gas for VRF request', async function () {});
+    it.skip('should restrict open request when paused', async function () {});
+    it.skip('should restrict open with zero total units', async function () {});
+    it.skip('should restrict open with total units less than supply', async function () {});
+    it.skip('should burn boxes specified in open request', async function () {});
+
+    it.skip('should allocate ERC20 rewards', async function () {});
+    it.skip('should allocate ERC721 rewards', async function () {});
+    it.skip('should allocate ERC1155 rewards', async function () {});
+    it.skip('should allocate ERC1155 NFT rewards', async function () {});
+    it.skip('should allocate all rewards', async function () {});
+    it.skip('should move remainder of ERC721 rewards to leftovers', async function () {});
+    it.skip('should move remainder of ERC1155 NFT rewards to leftovers', async function () {});
+  });
+
+  describe('Native currency payment', function() {
+    it.skip('should restrict more then one pending open request per opener', async function () {});
+    it.skip('should restrict open request with less than 100,000 gas for VRF request', async function () {});
+    it.skip('should restrict open request when paused', async function () {});
+    it.skip('should restrict open with zero total units', async function () {});
+    it.skip('should restrict open with total units less than supply', async function () {});
+    it.skip('should burn boxes specified in open request', async function () {});
+
+    it.skip('should allocate ERC20 rewards', async function () {});
+    it.skip('should allocate ERC721 rewards', async function () {});
+    it.skip('should allocate ERC1155 rewards', async function () {});
+    it.skip('should allocate ERC1155 NFT rewards', async function () {});
+    it.skip('should allocate all rewards', async function () {});
+    it.skip('should move remainder of ERC721 rewards to leftovers', async function () {});
+    it.skip('should move remainder of ERC1155 NFT rewards to leftovers', async function () {});
+  });
 });
