@@ -49,6 +49,12 @@ describe('Lootbox', function () {
     expect(members).to.eql(expected);
   };
 
+  const expectEvents = async (tx, expectedCount) => {
+    const receipt = await (await tx).wait();
+    expect(receipt.events.length).to.equal(expectedCount);
+    return expect(tx);
+  };
+
   it('should deploy lootbox and have valid defaults', async function () {
     const { lootbox, factory, ADMIN, MINTER, PAUSER } = await loadFixture(deployLootbox);
     const [owner] = await ethers.getSigners();
@@ -61,18 +67,102 @@ describe('Lootbox', function () {
     await expectRoleMembers(lootbox, ADMIN, [owner.address]);
     await expectRoleMembers(lootbox, MINTER, [owner.address]);
     await expectRoleMembers(lootbox, PAUSER, [owner.address]);
+    expect(await lootbox.getSuppliers()).to.eql([]);
+    expect(await lootbox.getLootboxTypes()).to.eql([]);
+    expect(await lootbox.getAllowedTokens()).to.eql([]);
+    expect(await lootbox.getInventory()).to.eql([[], []]);
   });
 
-  it.skip('should allow admin to set base URI', async function () {});
-  it.skip('should restrict others to set base URI', async function () {});
+  it('should allow admin to set base URI', async function () {
+    const { lootbox } = await loadFixture(deployLootbox);
+    const [owner] = await ethers.getSigners();
+    await lootbox.setURI('newUri');
+    expect(await lootbox.uri(0)).to.equal('newUri');
+  });
+  it('should restrict others to set base URI', async function () {
+    const { lootbox } = await loadFixture(deployLootbox);
+    const [_, other] = await ethers.getSigners();
+    await expect(lootbox.connect(other).setURI('newUri'))
+      .to.be.revertedWith(/AccessControl/);
+    await expect(lootbox.connect(other).setURI(''))
+      .to.be.revertedWith(/AccessControl/);
+  });
 
-  it.skip('should allow admin to add suppliers', async function () {});
-  it.skip('should not emit events when adding duplicate suppliers', async function () {});
-  it.skip('should restrict others to add suppliers', async function () {});
-  it.skip('should allow admin to remove suppliers', async function () {});
-  it.skip('should not emit events when removing absent suppliers', async function () {});
-  it.skip('should restrict others to remove suppliers', async function () {});
-  it.skip('should list suppliers', async function () {});
+  it('should allow admin to add suppliers', async function () {
+    const { lootbox } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await expect(lootbox.addSuppliers([supplier.address]))
+      .to.emit(lootbox, 'SupplierAdded')
+      .withArgs(supplier.address);
+    expect(await lootbox.getSuppliers()).to.eql([supplier.address]);
+    await expect(lootbox.addSuppliers([user.address, owner.address]))
+      .to.emit(lootbox, 'SupplierAdded')
+      .withArgs(user.address)
+      .to.emit(lootbox, 'SupplierAdded')
+      .withArgs(owner.address);
+    expect(await lootbox.getSuppliers()).to.eql([supplier.address, user.address, owner.address]);
+  });
+  it('should not emit events when adding duplicate suppliers', async function () {
+    const { lootbox } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await lootbox.addSuppliers([supplier.address]);
+    await (await expectEvents(lootbox.addSuppliers([supplier.address, owner.address]), 1))
+      .to.emit(lootbox, 'SupplierAdded')
+      .withArgs(owner.address);
+    expect(await lootbox.getSuppliers()).to.eql([supplier.address, owner.address]);
+  });
+  it('should restrict others to add suppliers', async function () {
+    const { lootbox } = await loadFixture(deployLootbox);
+    const [_, other] = await ethers.getSigners();
+    await expect(lootbox.connect(other).addSuppliers([other.address]))
+      .to.be.revertedWith(/AccessControl/);
+    await expect(lootbox.connect(other).addSuppliers([]))
+      .to.be.revertedWith(/AccessControl/);
+  });
+  it('should allow admin to remove suppliers', async function () {
+    const { lootbox } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await lootbox.addSuppliers([supplier.address, user.address, owner.address]);
+    await expect(lootbox.removeSuppliers([supplier.address]))
+      .to.emit(lootbox, 'SupplierRemoved')
+      .withArgs(supplier.address);
+    expect(await lootbox.getSuppliers()).to.include.all.members([user.address, owner.address]);
+    await expect(lootbox.removeSuppliers([user.address, owner.address]))
+      .to.emit(lootbox, 'SupplierRemoved')
+      .withArgs(user.address)
+      .to.emit(lootbox, 'SupplierRemoved')
+      .withArgs(owner.address);
+    expect(await lootbox.getSuppliers()).to.eql([]);
+  });
+  it('should not emit events when removing absent suppliers', async function () {
+    const { lootbox } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await lootbox.addSuppliers([supplier.address, user.address, owner.address]);
+    await lootbox.removeSuppliers([supplier.address]);
+    await (await expectEvents(lootbox.removeSuppliers([supplier.address, user.address, owner.address]), 2))
+      .to.emit(lootbox, 'SupplierRemoved')
+      .withArgs(user.address)
+      .to.emit(lootbox, 'SupplierRemoved')
+      .withArgs(owner.address);
+    expect(await lootbox.getSuppliers()).to.eql([]);
+  });
+  it('should restrict others to remove suppliers', async function () {
+    const { lootbox } = await loadFixture(deployLootbox);
+    const [owner, other] = await ethers.getSigners();
+    await lootbox.addSuppliers([other.address]);
+    await expect(lootbox.connect(other).removeSuppliers([other.address]))
+      .to.be.revertedWith(/AccessControl/);
+    await expect(lootbox.connect(other).removeSuppliers([owner.address]))
+      .to.be.revertedWith(/AccessControl/);
+    await expect(lootbox.connect(other).removeSuppliers([]))
+      .to.be.revertedWith(/AccessControl/);
+  });
+  it('should list suppliers', async function () {
+    const { lootbox } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await lootbox.addSuppliers([supplier.address, user.address, owner.address]);
+    expect(await lootbox.getSuppliers()).to.eql([supplier.address, user.address, owner.address]);
+  });
 
   it.skip('should allow admin to allow tokens', async function () {});
   it.skip('should not emit events when allowing duplicate tokens', async function () {});
