@@ -576,6 +576,14 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     return false;
   }
 
+  function getLink() external view returns (address) {
+    return address(LINK);
+  }
+
+  function getVRFV2Wrapper() external view returns (address) {
+    return address(VRF_V2_WRAPPER);
+  }
+
   /*//////////////////////////////////////////////////////////////
                            OWNER FUNCTIONS
   //////////////////////////////////////////////////////////////*/

@@ -1,12 +1,67 @@
-const {
-  time,
-  loadFixture,
-} = require('@nomicfoundation/hardhat-network-helpers');
+const { loadFixture } = require('@nomicfoundation/hardhat-network-helpers');
 const { anyValue } = require('@nomicfoundation/hardhat-chai-matchers/withArgs');
 const { expect } = require('chai');
+const { linkToken, vrfV2Wrapper, linkHolder } = require('../network.config.js')['31337'];
+
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
 describe('Lootbox', function () {
-  it.skip('should deploy lootbox and have valid defaults', async function () {});
+  const deployLootbox = async (linkAddress, wrapperAddress) => {
+    const [owner, supplier, user] = await ethers.getSigners();
+    const link = await ethers.getContractAt('LinkTokenInterface', linkAddress || linkToken);
+    const lootboxFactoryFactory = await ethers.getContractFactory('LootboxFactory');
+    const factory = await lootboxFactoryFactory.deploy(
+      link.address,
+      wrapperAddress || vrfV2Wrapper
+    );
+
+    await factory.deployed();
+    const impersonatedLinkHolder = await ethers.getImpersonatedSigner(linkHolder);
+    await link.connect(impersonatedLinkHolder)
+      .transfer(owner.address, ethers.utils.parseUnits('10000'));
+    await link.connect(impersonatedLinkHolder)
+      .transfer(supplier.address, ethers.utils.parseUnits('10000'));
+    await link.connect(impersonatedLinkHolder)
+      .transfer(user.address, ethers.utils.parseUnits('10000'));
+
+    await factory.deployLootbox('someUri', 0);
+    const deployedLootbox = await factory.getLootbox(owner.address, 0);
+    const lootbox = await ethers.getContractAt('Lootbox', deployedLootbox);
+
+    const ADMIN = await lootbox.DEFAULT_ADMIN_ROLE();
+    const MINTER = await lootbox.MINTER_ROLE();
+    const PAUSER = await lootbox.PAUSER_ROLE();
+
+    return { factory, lootbox, link, ADMIN, MINTER, PAUSER };
+  };
+
+  const listRoleMembers = async (contract, role) => {
+    const count = await contract.getRoleMemberCount(role);
+    const members = [];
+    for (let i = 0; i < count; i++) {
+      members.push(await contract.getRoleMember(role, i));
+    }
+    return members;
+  };
+
+  const expectRoleMembers = async (lootbox, role, expected) => {
+    const members = await listRoleMembers(lootbox, role);
+    expect(members).to.eql(expected);
+  };
+
+  it('should deploy lootbox and have valid defaults', async function () {
+    const { lootbox, factory, ADMIN, MINTER, PAUSER } = await loadFixture(deployLootbox);
+    const [owner] = await ethers.getSigners();
+    expect(await lootbox.getLink()).to.equal(linkToken);
+    expect(await lootbox.getVRFV2Wrapper()).to.equal(vrfV2Wrapper);
+    expect(await lootbox.uri(0)).to.equal('someUri');
+    expect(await lootbox.FACTORY()).to.equal(factory.address);
+    const wrapper = await ethers.getContractAt('IVRFV2Wrapper', vrfV2Wrapper);
+    expect(await lootbox.LINK_ETH_FEED()).to.equal(await wrapper.LINK_ETH_FEED());
+    await expectRoleMembers(lootbox, ADMIN, [owner.address]);
+    await expectRoleMembers(lootbox, MINTER, [owner.address]);
+    await expectRoleMembers(lootbox, PAUSER, [owner.address]);
+  });
 
   it.skip('should allow admin to set base URI', async function () {});
   it.skip('should restrict others to set base URI', async function () {});
