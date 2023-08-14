@@ -531,24 +531,54 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
         if (inventory.contains(token)) {
           continue;
         }
-      }
-      EnumerableSet.UintSet storage tokenIds =
-        (rewardType == RewardType.ERC1155) ? leftoversExtraIds[token] : rewards[token].ids;
-      uint ids = tokenIds.length();
-      if (ids == 0) {
-        continue;
-      }
-      leftoversResult[k].extra = new ExtraRewardInfo[](ids);
-      for (uint j = 0; j < ids; ++j) {
-        uint id = tokenIds.at(j);
-        leftoversResult[k].extra[j].id = id;
-        if (rewardType == RewardType.ERC1155) {
-          leftoversResult[k].extra[j].amountPerUnit = amountPerUnit(rewards[token].extraInfo[id]);
-          leftoversResult[k].extra[j].balance =
-            IERC1155(token).balanceOf(address(this), id) - allocated[token][id]
-            - (units(rewards[token].extraInfo[id]) * leftoversResult[k].extra[j].amountPerUnit);
+        EnumerableSet.UintSet storage tokenIds = rewards[token].ids;
+        uint ids = tokenIds.length();
+        if (ids == 0) {
+          continue;
         }
+        leftoversResult[k].extra = new ExtraRewardInfo[](ids);
+        for (uint j = 0; j < ids; ++j) {
+          leftoversResult[k].extra[j].id = tokenIds.at(j);
+        }
+      } else {
+        // Same as with ERC20, ERC1155 could have a particular asset ID simultaneously in the inventory and leftovers.
+        // TODO: refactor code duplication.
+        EnumerableSet.UintSet storage tokenIds = rewards[token].ids;
+        EnumerableSet.UintSet storage leftoverTokenIds = leftoversExtraIds[token];
+        ExtraRewardInfo[] memory extra = new ExtraRewardInfo[](tokenIds.length() + leftoverTokenIds.length());
+        uint l = 0;
+        for (uint j = 0; j < tokenIds.length(); ++j) {
+          uint id = tokenIds.at(j);
+          extra[l].id = id;
+          extra[l].amountPerUnit = amountPerUnit(rewards[token].extraInfo[id]);
+          extra[l].balance = IERC1155(token).balanceOf(address(this), id) - allocated[token][id]
+            - (units(rewards[token].extraInfo[id]) * extra[l].amountPerUnit);
+          if (extra[l].balance == 0) {
+            continue;
+          }
+          ++l;
+        }
+        for (uint j = 0; j < leftoverTokenIds.length(); ++j) {
+          uint id = leftoverTokenIds.at(j);
+          extra[l].id = id;
+          extra[l].amountPerUnit = amountPerUnit(rewards[token].extraInfo[id]);
+          extra[l].balance = IERC1155(token).balanceOf(address(this), id) - allocated[token][id]
+            - (units(rewards[token].extraInfo[id]) * extra[l].amountPerUnit);
+          if (extra[l].balance == 0) {
+            continue;
+          }
+          ++l;
+        }
+        if (l == 0) {
+          continue;
+        }
+        // Shrink the leftovers extra array to its actual size.
+        assembly {
+          mstore(extra, l)
+        }
+        leftoversResult[k].extra = extra;
       }
+
       ++k;
     }
     // Shrink the leftovers array to its actual size.
