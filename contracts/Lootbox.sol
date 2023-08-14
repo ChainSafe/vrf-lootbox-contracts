@@ -283,13 +283,14 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     if (_not(tokenAllowed(token))) revert TokenDenied(token);
     if (_not(supplyAllowed(from))) revert SupplyDenied(from);
     RewardInfo rewardInfo = rewards[token].rewardInfo;
-    bool isFirstTime = isEmpty(rewardInfo);
+    RewardType rewardType = rewards[token].rewardType;
+    bool isFirstTime = rewardType == RewardType.UNSET;
     if (isFirstTime) {
       rewardInfo = toInfo(0, 1);
       rewards[token].rewardInfo = rewardInfo;
       rewards[token].rewardType = RewardType.ERC721;
-    } else if (rewards[token].rewardType != RewardType.ERC721) {
-      revert ModifiedRewardType(rewards[token].rewardType, RewardType.ERC721);
+    } else if (rewardType != RewardType.ERC721) {
+      revert ModifiedRewardType(rewardType, RewardType.ERC721);
     }
     _supplyNFT(rewardInfo, token, tokenId);
     return this.onERC721Received.selector;
@@ -748,11 +749,12 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
 
   function _supplyNFT(RewardInfo rewardInfo, address token, uint id) internal {
     if (_not(rewards[token].ids.add(id))) revert DepositStateCorruption(token, id);
+    uint perUnit = amountPerUnit(rewardInfo);
     uint unitsOld = units(rewardInfo);
-    uint unitsNew = rewards[token].ids.length() / amountPerUnit(rewardInfo);
+    uint unitsNew = perUnit == 0 ? 0 : (rewards[token].ids.length() / perUnit);
     uint unitsAdded = unitsNew - unitsOld;
     if (unitsAdded > 0) {
-      rewards[token].rewardInfo = toInfo(unitsNew, amountPerUnit(rewardInfo));
+      rewards[token].rewardInfo = toInfo(unitsNew, perUnit);
       unitsSupply = unitsSupply + unitsAdded;
       if (unitsOld == 0) {
         if (_not(inventory.add(token))) revert InventoryStateCorruption(token);
