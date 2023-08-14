@@ -535,6 +535,9 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
       EnumerableSet.UintSet storage tokenIds =
         (rewardType == RewardType.ERC1155) ? leftoversExtraIds[token] : rewards[token].ids;
       uint ids = tokenIds.length();
+      if (ids == 0) {
+        continue;
+      }
       leftoversResult[k].extra = new ExtraRewardInfo[](ids);
       for (uint j = 0; j < ids; ++j) {
         uint id = tokenIds.at(j);
