@@ -377,6 +377,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     }
   }
 
+  // TODO: allow partial claiming to avoid OOG.
   /// @notice Claims the rewards for the lootbox openning
   /// @dev The user must have some rewards allocated
   /// @param _opener The address of the user that has an allocation after opening
@@ -703,9 +704,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
       unitsNew = unitsOld - tokenUnitsOld + tokenUnitsNew;
       rewardInfo = toInfo(unitsNew, amountPerUnit(rewardInfo));
       if (tokenUnitsNew > 0) {
-        if (balance % _amountPerUnit == 0) {
-          leftoversExtraIds[_token].remove(_id);
-        }
+        leftoversExtraIds[_token].remove(_id); // TODO: Refactor into the same logic as with allowed tokens. There should be a list of 1155 ids which are present in the inventory or not.
         rewards[_token].ids.add(_id);
       } else {
         rewards[_token].ids.remove(_id);

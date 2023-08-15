@@ -1231,49 +1231,600 @@ describe('Lootbox', function () {
     expect(await lootbox.unitsSupply()).to.equal(1);
   });
 
-  it.skip('should allow supplier to supply single allowed ERC1155 NFT', async function () {});
-  it.skip('should restrict others to supply single allowed ERC1155 NFT', async function () {});
-  it.skip('should restrict supplier to supply single disalowed ERC1155 NFT', async function () {});
-  it.skip('should allow supplier to resupply single ERC1155 NFT', async function () {});
-  it.skip('should restrict supplier to supply single ERC1155 NFT if it was already assigned a different type', async function () {});
-  it.skip('should put first time supplied single ERC1155 NFT straight into inventory with 1 reward per unit', async function () {});
-  it.skip('should put resupplied single ERC1155 NFT into leftovers if configured with 0 reward per unit', async function () {});
-  it.skip('should restrict supplier to resupply single ERC1155 NFT if this ID was already supplied', async function () {});
-  it.skip('should restrict supplier to supply single ERC1155 NFT with value > 1', async function () {});
-  it.skip('should restrict supplier to supply single ERC1155 NFT with zero value', async function () {});
+  it('should allow supplier to supply single allowed ERC1155 NFT', async function () {
+    const { lootbox, erc1155NFT } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155NFT.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x');
+  });
+  it('should restrict others to supply single allowed ERC1155 NFT', async function () {
+    const { lootbox, erc1155NFT } = await loadFixture(deployLootbox);
+    const [owner, supplier, other] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155NFT.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, other.address, 1, 1, '0x');
+    await expect(erc1155NFT.connect(other).safeTransferFrom(other.address, lootbox.address, 1, 1, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x');
+    await expect(erc1155NFT.connect(other).safeTransferFrom(other.address, lootbox.address, 1, 1, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+  });
+  it('should restrict supplier to supply single disalowed ERC1155 NFT', async function () {
+    const { lootbox, erc1155NFT, erc20 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc20.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await expect(erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+  });
+  it('should allow supplier to resupply single ERC1155 NFT', async function () {
+    const { lootbox, erc1155NFT } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155NFT.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x');
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 1, '0x');
+  });
+  it('should restrict supplier to supply single ERC1155 NFT if it was already assigned a different type', async function () {
+    const { lootbox, erc1155NFT } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155NFT.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await setBalance(erc1155NFT.address, ethers.utils.parseUnits('1'));
+    const erc1155NFTSigner = await ethers.getImpersonatedSigner(erc1155NFT.address);
+    await lootbox.connect(erc1155NFTSigner).onERC721Received(ZERO_ADDRESS, supplier.address, 0, '0x'); // This should mark it as ERC721.
+    await expect(erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+  });
+  it('should put first time supplied single ERC1155 NFT straight into inventory with 1 reward per unit', async function () {
+    const { lootbox, erc1155NFT } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155NFT.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x');
+    await expectInventory(lootbox, [{
+      rewardToken: erc1155NFT.address,
+      rewardType: RewardType.ERC1155NFT,
+      units: 1,
+      amountPerUnit: 1,
+      balance: NOT_USED,
+      extra: [NFT(0)],
+    }], []);
+    expect(await lootbox.unitsSupply()).to.equal(1);
+  });
+  it('should put resupplied single ERC1155 NFT into leftovers if configured with 0 reward per unit', async function () {
+    const { lootbox, erc1155NFT } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155NFT.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x');
+    await lootbox.setAmountsPerUnit([erc1155NFT.address], [NOT_USED], [0]);
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 1, '0x');
+    await expectInventory(lootbox, [], [{
+      rewardToken: erc1155NFT.address,
+      rewardType: RewardType.ERC1155NFT,
+      units: 0,
+      amountPerUnit: 0,
+      balance: NOT_USED,
+      extra: [NFT(0), NFT(1)],
+    }]);
+    expect(await lootbox.unitsSupply()).to.equal(0);
+  });
+  it('should restrict supplier to resupply single ERC1155 NFT if this ID was already supplied', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x');
+    await expect(erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 1, '0x');
+  });
+  it('should restrict supplier to supply single ERC1155 NFT with value > 1', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x');
+    await expect(erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 2, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 1, '0x');
+  });
+  it('should restrict supplier to supply single ERC1155 NFT with zero value', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await expect(erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 0, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x');
+    await expect(erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 0, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+  });
 
-  it.skip('should allow supplier to supply multiple allowed ERC1155 NFT', async function () {});
-  it.skip('should restrict others to supply multiple allowed ERC1155 NFT', async function () {});
-  it.skip('should restrict supplier to supply multiple disalowed ERC1155 NFT', async function () {});
-  it.skip('should allow supplier to resupply multiple ERC1155 NFT', async function () {});
-  it.skip('should restrict supplier to supply multiple ERC1155 NFT if it was already assigned a different type', async function () {});
-  it.skip('should put first time supplied multiple ERC1155 NFT straight into inventory with 1 reward per unit', async function () {});
-  it.skip('should put resupplied multiple ERC1155 NFT into leftovers if configured with 0 reward per unit', async function () {});
-  it.skip('should restrict supplier to resupply multiple ERC1155 NFT if this ID was already supplied', async function () {});
-  it.skip('should restrict supplier to supply multiple ERC1155 NFT with value > 1', async function () {});
-  it.skip('should restrict supplier to supply multiple ERC1155 NFT with zero value', async function () {});
+  it('should allow supplier to supply multiple allowed ERC1155 NFT', async function () {
+    const { lootbox, erc1155NFT } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155NFT.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x');
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 1, '0x');
+  });
+  it('should restrict others to supply multiple allowed ERC1155 NFT', async function () {
+    const { lootbox, erc1155NFT } = await loadFixture(deployLootbox);
+    const [owner, supplier, other] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155NFT.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, other.address, 1, 1, '0x');
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, other.address, 2, 1, '0x');
+    await expect(erc1155NFT.connect(other).safeTransferFrom(other.address, lootbox.address, 1, 1, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x');
+    await expect(erc1155NFT.connect(other).safeTransferFrom(other.address, lootbox.address, 1, 1, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await expect(erc1155NFT.connect(other).safeTransferFrom(other.address, lootbox.address, 2, 1, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+  });
+  it('should restrict supplier to supply multiple disalowed ERC1155 NFT', async function () {
+    const { lootbox, erc1155NFT, erc20 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc20.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await expect(erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await expect(erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 1, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+  });
+  it('should allow supplier to resupply multiple ERC1155 NFT', async function () {
+    const { lootbox, erc1155NFT } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155NFT.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x');
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 1, '0x');
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 2, 1, '0x');
+  });
+  it('should restrict supplier to supply multiple ERC1155 NFT if it was already assigned a different type', async function () {
+    const { lootbox, erc1155NFT } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155NFT.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await setBalance(erc1155NFT.address, ethers.utils.parseUnits('1'));
+    const erc1155NFTSigner = await ethers.getImpersonatedSigner(erc1155NFT.address);
+    await lootbox.connect(erc1155NFTSigner).onERC721Received(ZERO_ADDRESS, supplier.address, 0, '0x'); // This should mark it as ERC721.
+    await expect(erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await expect(erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 1, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+  });
+  it('should put first time supplied multiple ERC1155 NFT straight into inventory with 1 reward per unit', async function () {
+    const { lootbox, erc1155NFT } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155NFT.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x');
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 1, '0x');
+    await expectInventory(lootbox, [{
+      rewardToken: erc1155NFT.address,
+      rewardType: RewardType.ERC1155NFT,
+      units: 2,
+      amountPerUnit: 1,
+      balance: NOT_USED,
+      extra: [NFT(0), NFT(1)],
+    }], []);
+    expect(await lootbox.unitsSupply()).to.equal(2);
+  });
+  it('should put resupplied multiple ERC1155 NFT into leftovers if configured with 0 reward per unit', async function () {
+    const { lootbox, erc1155NFT } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155NFT.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x');
+    await lootbox.setAmountsPerUnit([erc1155NFT.address], [NOT_USED], [0]);
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 1, '0x');
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 2, 1, '0x');
+    await expectInventory(lootbox, [], [{
+      rewardToken: erc1155NFT.address,
+      rewardType: RewardType.ERC1155NFT,
+      units: 0,
+      amountPerUnit: 0,
+      balance: NOT_USED,
+      extra: [NFT(0), NFT(1), NFT(2)],
+    }]);
+    expect(await lootbox.unitsSupply()).to.equal(0);
+  });
+  it('should restrict supplier to resupply multiple ERC1155 NFT if this ID was already supplied', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x');
+    await expect(erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 1, '0x');
+    await expect(erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 1, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+  });
+  it('should restrict supplier to supply multiple ERC1155 NFT with value > 1', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x');
+    await expect(erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 2, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 1, '0x');
+    await expect(erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 2, 2, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+  });
+  it('should restrict supplier to supply multiple ERC1155 NFT with zero value', async function () {
+    const { lootbox, erc1155NFT } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155NFT.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await expect(erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 0, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x');
+    await expect(erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 0, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 1, '0x');
+  });
 
-  it.skip('should allow supplier to supply single allowed ERC1155', async function () {});
-  it.skip('should restrict others to supply single allowed ERC1155', async function () {});
-  it.skip('should restrict supplier to supply single disalowed ERC1155', async function () {});
-  it.skip('should allow supplier to resupply single ERC1155', async function () {});
-  it.skip('should restrict supplier to supply single ERC1155 if it was already assigned a different type', async function () {});
-  it.skip('should put first time supplied single ERC1155 into leftovers with 0 reward per unit', async function () {});
-  it.skip('should put resupplied single ERC1155 into leftovers if configured with 0 reward per unit', async function () {});
-  it.skip('should put resupplied single ERC1155 into leftovers if there is a remainder', async function () {});
-  it.skip('should allow supplier to resupply single ERC1155 if this ID was already supplied', async function () {});
-  it.skip('should restrict supplier to supply single ERC1155 with zero value', async function () {});
+  it('should allow supplier to supply single allowed ERC1155', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 5, '0x');
+  });
+  it('should restrict others to supply single allowed ERC1155', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier, other] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, other.address, 0, 10, '0x');
+    await expect(erc1155.connect(other).safeTransferFrom(other.address, lootbox.address, 0, 10, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 10, '0x');
+    await expect(erc1155.connect(other).safeTransferFrom(other.address, lootbox.address, 0, 10, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+  });
+  it('should restrict supplier to supply single disalowed ERC1155', async function () {
+    const { lootbox, erc1155, erc20 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc20.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await expect(erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 10, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+  });
+  it('should allow supplier to resupply single ERC1155', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 11, '0x');
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 11, '0x');
+    await lootbox.setAmountsPerUnit([erc1155.address], [0], [11]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 5, '0x');
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 6, '0x');
+  });
+  it('should restrict supplier to supply single ERC1155 if it was already assigned a different type', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await setBalance(erc1155.address, ethers.utils.parseUnits('1'));
+    const erc1155Signer = await ethers.getImpersonatedSigner(erc1155.address);
+    await lootbox.connect(erc1155Signer).onERC721Received(ZERO_ADDRESS, supplier.address, 0, '0x'); // This should mark it as ERC721.
+    await expect(erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+  });
+  it('should put first time supplied single ERC1155 into leftovers with 0 reward per unit', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 11, '0x');
+    await expectInventory(lootbox, [], [{
+      rewardToken: erc1155.address,
+      rewardType: RewardType.ERC1155,
+      units: NOT_USED,
+      amountPerUnit: NOT_USED,
+      balance: NOT_USED,
+      extra: [{
+        id: 0,
+        units: NOT_USED,
+        amountPerUnit: 0,
+        balance: 11,
+      }],
+    }]);
+    expect(await lootbox.unitsSupply()).to.equal(0);
+  });
+  it('should put resupplied single ERC1155 into leftovers if configured with 0 reward per unit', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 11, '0x');
+    await lootbox.setAmountsPerUnit([erc1155.address], [0], [0]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 8, '0x');
+    await expectInventory(lootbox, [], [{
+      rewardToken: erc1155.address,
+      rewardType: RewardType.ERC1155,
+      units: NOT_USED,
+      amountPerUnit: NOT_USED,
+      balance: NOT_USED,
+      extra: [{
+        id: 0,
+        units: NOT_USED,
+        amountPerUnit: 0,
+        balance: 19,
+      }],
+    }]);
+    expect(await lootbox.unitsSupply()).to.equal(0);
+  });
+  it('should put resupplied single ERC1155 into leftovers if there is a remainder', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 11, '0x');
+    await lootbox.setAmountsPerUnit([erc1155.address], [0], [10]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 8, '0x');
+    await expectInventory(lootbox, [{
+      rewardToken: erc1155.address,
+      rewardType: RewardType.ERC1155,
+      units: 1,
+      amountPerUnit: NOT_USED,
+      balance: NOT_USED,
+      extra: [{
+        id: 0,
+        units: 1,
+        amountPerUnit: 10,
+        balance: 10,
+      }],
+    }], [{
+      rewardToken: erc1155.address,
+      rewardType: RewardType.ERC1155,
+      units: NOT_USED,
+      amountPerUnit: NOT_USED,
+      balance: NOT_USED,
+      extra: [{
+        id: 0,
+        units: NOT_USED,
+        amountPerUnit: 10,
+        balance: 9,
+      }],
+    }]);
+    expect(await lootbox.unitsSupply()).to.equal(1);
+  });
+  it('should allow supplier to resupply single ERC1155 if this ID was already supplied', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 2, '0x');
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 10, '0x');
+  });
+  it('should restrict supplier to supply single ERC1155 with zero value', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await expect(erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 0, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 2, '0x');
+    await expect(erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 0, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x');
+  });
 
-  it.skip('should allow supplier to supply multiple allowed ERC1155', async function () {});
-  it.skip('should restrict others to supply multiple allowed ERC1155', async function () {});
-  it.skip('should restrict supplier to supply multiple disalowed ERC1155', async function () {});
-  it.skip('should allow supplier to resupply multiple ERC1155', async function () {});
-  it.skip('should restrict supplier to supply multiple ERC1155 if it was already assigned a different type', async function () {});
-  it.skip('should put first time supplied multiple ERC1155 into leftovers with 0 reward per unit', async function () {});
-  it.skip('should put resupplied multiple ERC1155 into leftovers if configured with 0 reward per unit', async function () {});
-  it.skip('should put resupplied multiple ERC1155 into leftovers if there is a remainder', async function () {});
-  it.skip('should allow supplier to resupply multiple ERC1155 if this ID was already supplied', async function () {});
-  it.skip('should restrict supplier to supply multiple ERC1155 with zero value', async function () {});
+  it('should allow supplier to supply multiple allowed ERC1155', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 5, '0x');
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 8, '0x');
+  });
+  it('should restrict others to supply multiple allowed ERC1155', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier, other] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, other.address, 0, 10, '0x');
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, other.address, 1, 5, '0x');
+    await expect(erc1155.connect(other).safeTransferFrom(other.address, lootbox.address, 0, 10, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await expect(erc1155.connect(other).safeTransferFrom(other.address, lootbox.address, 1, 2, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 10, '0x');
+    await expect(erc1155.connect(other).safeTransferFrom(other.address, lootbox.address, 0, 10, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await expect(erc1155.connect(other).safeTransferFrom(other.address, lootbox.address, 1, 5, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+  });
+  it('should restrict supplier to supply multiple disalowed ERC1155', async function () {
+    const { lootbox, erc1155, erc20 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc20.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await expect(erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 10, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await expect(erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 20, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+  });
+  it('should allow supplier to resupply multiple ERC1155', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 11, '0x');
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 13, '0x');
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 2, 33, '0x');
+    await lootbox.setAmountsPerUnit([erc1155.address, erc1155.address], [0, 1], [11, 13]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 11, '0x');
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 13, '0x');
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 2, 33, '0x');
+  });
+  it('should restrict supplier to supply multiple ERC1155 if it was already assigned a different type', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await setBalance(erc1155.address, ethers.utils.parseUnits('1'));
+    const erc1155Signer = await ethers.getImpersonatedSigner(erc1155.address);
+    await lootbox.connect(erc1155Signer).onERC721Received(ZERO_ADDRESS, supplier.address, 0, '0x'); // This should mark it as ERC721.
+    await expect(erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await expect(erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 1, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+  });
+  it('should put first time supplied multiple ERC1155 into leftovers with 0 reward per unit', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 11, '0x');
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 13, '0x');
+    await lootbox.setAmountsPerUnit([erc1155.address], [0], [11]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 2, 33, '0x');
+    await expectInventory(lootbox, [{
+      rewardToken: erc1155.address,
+      rewardType: RewardType.ERC1155,
+      units: 1,
+      amountPerUnit: NOT_USED,
+      balance: NOT_USED,
+      extra: [{
+        id: 0,
+        units: 1,
+        amountPerUnit: 11,
+        balance: 11,
+      }],
+    }], [{
+      rewardToken: erc1155.address,
+      rewardType: RewardType.ERC1155,
+      units: NOT_USED,
+      amountPerUnit: NOT_USED,
+      balance: NOT_USED,
+      extra: [{
+        id: 1,
+        units: NOT_USED,
+        amountPerUnit: 0,
+        balance: 13,
+      }, {
+        id: 2,
+        units: NOT_USED,
+        amountPerUnit: 0,
+        balance: 33,
+      }],
+    }]);
+    expect(await lootbox.unitsSupply()).to.equal(1);
+  });
+  it('should put resupplied multiple ERC1155 into leftovers if configured with 0 reward per unit', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 11, '0x');
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 13, '0x');
+    await lootbox.setAmountsPerUnit([erc1155.address, erc1155.address], [0, 1], [0, 0]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 8, '0x');
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 10, '0x');
+    await expectInventory(lootbox, [], [{
+      rewardToken: erc1155.address,
+      rewardType: RewardType.ERC1155,
+      units: NOT_USED,
+      amountPerUnit: NOT_USED,
+      balance: NOT_USED,
+      extra: [{
+        id: 0,
+        units: NOT_USED,
+        amountPerUnit: 0,
+        balance: 19,
+      }, {
+        id: 1,
+        units: NOT_USED,
+        amountPerUnit: 0,
+        balance: 23,
+      }],
+    }]);
+    expect(await lootbox.unitsSupply()).to.equal(0);
+  });
+  it('should put resupplied multiple ERC1155 into leftovers if there is a remainder', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 11, '0x');
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 13, '0x');
+    await lootbox.setAmountsPerUnit([erc1155.address, erc1155.address], [0, 1], [10, 12]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 8, '0x');
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 10, '0x');
+    await expectInventory(lootbox, [{
+      rewardToken: erc1155.address,
+      rewardType: RewardType.ERC1155,
+      units: 2,
+      amountPerUnit: NOT_USED,
+      balance: NOT_USED,
+      extra: [{
+        id: 0,
+        units: 1,
+        amountPerUnit: 10,
+        balance: 10,
+      }, {
+        id: 1,
+        units: 1,
+        amountPerUnit: 12,
+        balance: 12,
+      }],
+    }], [{
+      rewardToken: erc1155.address,
+      rewardType: RewardType.ERC1155,
+      units: NOT_USED,
+      amountPerUnit: NOT_USED,
+      balance: NOT_USED,
+      extra: [{
+        id: 0,
+        units: NOT_USED,
+        amountPerUnit: 10,
+        balance: 9,
+      }, {
+        id: 1,
+        units: NOT_USED,
+        amountPerUnit: 12,
+        balance: 11,
+      }],
+    }]);
+    expect(await lootbox.unitsSupply()).to.equal(2);
+  });
+  it('should allow supplier to resupply multiple ERC1155 if this ID was already supplied', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 2, '0x');
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 10, '0x');
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 10, '0x');
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 20, '0x');
+  });
+  it('should restrict supplier to supply multiple ERC1155 with zero value', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier] = await ethers.getSigners();
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await expect(erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 0, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 2, '0x');
+    await expect(erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 0, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await expect(erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 0, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 1, '0x');
+    await expect(erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 0, '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+  });
 
   it.skip('should allow minter to mint lootboxes', async function () {});
   it.skip('should restrict others to mint lootboxes', async function () {});
