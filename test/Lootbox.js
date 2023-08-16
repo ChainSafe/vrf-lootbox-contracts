@@ -12,6 +12,8 @@ const RewardType = {
   ERC1155NFT: 4,
 };
 const safeTransferFrom = 'safeTransferFrom(address,address,uint256)';
+const IERC1155Receiver = '0x4e2312e0';
+const IERC1155 = '0xd9b67a26';
 
 const NFT = (id) => ({
   id,
@@ -98,6 +100,10 @@ describe('Lootbox', function () {
     const actualLeftovers = parseInventory(inventory.leftoversResult);
     expect(actualResult, 'Unexpected inventory result').to.eql(expectedResult);
     expect(actualLeftovers, 'Unexpected leftovers result').to.eql(expectedLeftovers);
+  };
+
+  const expectLootboxTypes = async (lootbox, expectedTypes) => {
+    expect((await lootbox.getLootboxTypes()).map(el => el.toNumber())).to.eql(expectedTypes);
   };
 
   it('should deploy lootbox and have valid defaults', async function () {
@@ -1826,13 +1832,65 @@ describe('Lootbox', function () {
       .to.be.revertedWith(/ERC1155Receiver/);
   });
 
-  it.skip('should allow minter to mint lootboxes', async function () {});
-  it.skip('should restrict others to mint lootboxes', async function () {});
-  it.skip('should support IERC1155Receiver interface', async function () {});
-  it.skip('should support IERC1155 interface', async function () {});
-  it.skip('should list lootbox types', async function () {});
+  it('should allow minter to mint lootboxes', async function () {
+    const { lootbox, MINTER } = await loadFixture(deployLootbox);
+    const [minter, other, user] = await ethers.getSigners();
+    await lootbox.mint(user.address, 1, 10, '0x');
+    expect(await lootbox.balanceOf(user.address, 1)).to.equal(10);
+    expect(await lootbox.boxedUnits()).to.equal(10);
+    await lootbox.mintBatch(user.address, [2], [4], '0x');
+    expect(await lootbox.balanceOf(user.address, 1)).to.equal(10);
+    expect(await lootbox.balanceOf(user.address, 2)).to.equal(4);
+    expect(await lootbox.boxedUnits()).to.equal(18);
+    await lootbox.grantRole(MINTER, other.address);
+    await lootbox.connect(other).mintBatch(user.address, [3, 1], [4, 2], '0x');
+    expect(await lootbox.balanceOf(user.address, 1)).to.equal(12);
+    expect(await lootbox.balanceOf(user.address, 2)).to.equal(4);
+    expect(await lootbox.balanceOf(user.address, 3)).to.equal(4);
+    expect(await lootbox.boxedUnits()).to.equal(32);
+  });
+  it('should restrict others to mint lootboxes', async function () {
+    const { lootbox } = await loadFixture(deployLootbox);
+    const [minter, other, user] = await ethers.getSigners();
+    await expect(lootbox.connect(other).mint(user.address, 1, 10, '0x'))
+      .to.be.revertedWith(/role/);
+  });
+  it('should restrict minting of 0 id lootboxes', async function () {
+    const { lootbox } = await loadFixture(deployLootbox);
+    const [minter, other, user] = await ethers.getSigners();
+    await expect(lootbox.mint(user.address, 0, 1, '0x'))
+      .to.be.revertedWithCustomError(lootbox, 'InvalidLootboxType');
+    await expect(lootbox.mint(user.address, 0, 10, '0x'))
+      .to.be.revertedWithCustomError(lootbox, 'InvalidLootboxType');
+  });
+  it('should restrict minting of 256+ id lootboxes', async function () {
+    const { lootbox } = await loadFixture(deployLootbox);
+    const [minter, other, user] = await ethers.getSigners();
+    await expect(lootbox.mint(user.address, 256, 1, '0x'))
+      .to.be.revertedWithCustomError(lootbox, 'InvalidLootboxType');
+    await expect(lootbox.mint(user.address, 256, 10, '0x'))
+      .to.be.revertedWithCustomError(lootbox, 'InvalidLootboxType');
+    await expect(lootbox.mint(user.address, 1000, 1, '0x'))
+      .to.be.revertedWithCustomError(lootbox, 'InvalidLootboxType');
+  });
+  it('should support IERC1155Receiver interface', async function () {
+    const { lootbox } = await loadFixture(deployLootbox);
+    expect(await lootbox.supportsInterface(IERC1155Receiver)).to.be.true;
+  });
+  it('should support IERC1155 interface', async function () {
+    const { lootbox } = await loadFixture(deployLootbox);
+    expect(await lootbox.supportsInterface(IERC1155)).to.be.true;
+  });
+  it('should list lootbox types', async function () {
+    const { lootbox } = await loadFixture(deployLootbox);
+    const [minter, other, user] = await ethers.getSigners();
+    await lootbox.mintBatch(user.address, [3, 1], [4, 2], '0x');
+    await lootbox.mintBatch(user.address, [2, 4], [4, 2], '0x');
+    await lootbox.mintBatch(user.address, [2, 4], [4, 2], '0x');
+    await expectLootboxTypes(lootbox, [3, 1, 2, 4]);
+  });
 
-  it.skip('should calculate open price based on the gas, VRF and LINK price and fee per unit', async function () {});
+  it.only('should calculate open price based on the gas, VRF and LINK price and fee per unit', async function () {});
 
   it.skip('should recover lootboxes from an own failed open request', async function () {});
   it.skip('should recover lootboxes from another opener failed request', async function () {});

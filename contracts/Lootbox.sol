@@ -62,6 +62,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   uint private constant LINK_UNIT = 1e18;
 
   uint public unitsSupply;
+  uint public boxedUnits;
   EnumerableSet.UintSet private lootboxTypes;
   EnumerableSet.AddressSet private suppliers;
   EnumerableSet.AddressSet private allowedTokens; // Tokens allowed for rewards.
@@ -962,22 +963,33 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
       ERC1155PresetMinterPauser.supportsInterface(interfaceId);
   }
 
-  function _beforeTokenTransfer(
+  function _afterTokenTransfer(
     address operator,
     address from,
     address to,
     uint256[] memory ids,
     uint256[] memory amounts,
     bytes memory data
-  ) internal virtual override(ERC1155PresetMinterPauser) {
+  ) internal virtual override {
     if (from == address(0)) {
+      uint unitBoxesAdded = 0;
       uint len = ids.length;
       for (uint i = 0; i < len; ++i) {
         uint id = ids[i];
         if (id == 0 || id > type(uint8).max) revert InvalidLootboxType();
         lootboxTypes.add(id);
+        unitBoxesAdded = unitBoxesAdded + (id * amounts[i]);
       }
+      boxedUnits = boxedUnits + unitBoxesAdded;
     }
-    super._beforeTokenTransfer(operator, from, to, ids, amounts, data);
+    if (to == address(0)) {
+      uint unitBoxesRemoved = 0;
+      uint len = ids.length;
+      for (uint i = 0; i < len; ++i) {
+        unitBoxesRemoved = unitBoxesRemoved + (ids[i] * amounts[i]);
+      }
+      boxedUnits = boxedUnits - unitBoxesRemoved;
+    }
+    super._afterTokenTransfer(operator, from, to, ids, amounts, data);
   }
 }
