@@ -39,7 +39,7 @@ import {IVRFV2Wrapper, AggregatorV3Interface} from './interfaces/IVRFV2Wrapper.s
 
 /// @title Lootbox
 /// @author ChainSafe Systems: Oleksii (Functionality) Sneakz (Natspec assistance)
-/// @notice This contract holds functions used in Chainsafe's SDK, Documentation can be found here: https://docs.gaming.chainsafe.io/current/lootboxes
+/// @notice This contract holds lootbox functions used in Chainsafe's SDK, Documentation can be found here: https://docs.gaming.chainsafe.io/current/lootboxes
 /// @dev Contract allows users to open a lootbox and receive a random reward. All function calls are tested and have been implemented in ChainSafe's SDK
 
 type RewardInfo is uint248; // 8 bytes unitsAvailable | 23 bytes amountPerUnit
@@ -265,8 +265,8 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     _setURI(_baseURI);
   }
 
-  /// @notice Adds contract suppliers.
-  /// @param _suppliers An array of suppliers being added.
+  /// @notice Adds loot suppliers.
+  /// @param _suppliers An array of loot suppliers being added.
   function addSuppliers(address[] calldata _suppliers) external onlyRole(DEFAULT_ADMIN_ROLE) {
     for (uint i = 0; i < _suppliers.length; ++i) {
       _addSupplier(_suppliers[i]);
@@ -289,7 +289,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     }
   }
 
-  /// @notice Sets the supply of units for lootbox usage.
+  /// @notice Sets the how much of a token you get per lootbox.
   /// @param _tokens An array of tokens being added.
   /// @param _ids An array of ids being added.
   /// @param _amountsPerUnit An array of amounts being added.
@@ -500,8 +500,8 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     ExtraRewardInfo[] extra;
   }
 
-  /// @notice Gets lootbox types for the contract.
-  /// @return uint Array of values if the token exists and is allowed.
+  /// @notice Gets lootbox types that have been minted for the contract.
+  /// @return uint Array of lootbox types that have been minted.
   function getLootboxTypes() external view returns (uint[] memory) {
     return lootboxTypes.values();
   }
@@ -812,7 +812,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     return uint(weiPerUnitLink);
   }
 
-  /// @notice Gets 1155 supply.
+  /// @notice Allows specific 1155 tokens to be used in the inventory.
   /// @param token The token address.
   /// @param id The token id.
   /// @param value The token value.
@@ -842,7 +842,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     }
   }
 
-  /// @notice Gets 1155 supply with reward information.
+  /// @notice Allows specific 1155 tokens to be used in the inventory with reward information.
   /// @param rewardInfo The reward information.
   /// @param token The token address.
   /// @param id The token id.
@@ -870,7 +870,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     }
   }
 
-  /// @notice Supplies NFT with reward information.
+  /// @notice Allows specific NFTs to be used in the inventory with reward information.
   /// @param rewardInfo The reward information.
   /// @param token The token address.
   /// @param id The token id.
