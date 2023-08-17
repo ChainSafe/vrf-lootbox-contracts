@@ -81,6 +81,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   uint private constant LINK_UNIT = 1e18;
 
   uint public unitsSupply; // Supply of units.
+  uint public boxedUnits; // Boxed units
   EnumerableSet.UintSet private lootboxTypes; // Types of lootboxes.
   EnumerableSet.AddressSet private suppliers; // Supplier addresses being used.
   EnumerableSet.AddressSet private allowedTokens; // Tokens allowed for rewards.
@@ -1081,14 +1082,14 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
       ERC1155PresetMinterPauser.supportsInterface(interfaceId);
   }
 
-  /// @notice Fires before token transfer.
+  /// @notice Fires after token transfer.
   /// @param operator Boolean value.
   /// @param from From address.
   /// @param to To address.
   /// @param ids Id array.
   /// @param amounts Amounts array.
   /// @param data Data in bytes.
-  function _beforeTokenTransfer(
+  function _afterTokenTransfer(
     address operator,
     address from,
     address to,
