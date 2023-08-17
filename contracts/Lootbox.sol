@@ -62,7 +62,8 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   uint private constant LINK_UNIT = 1e18;
 
   uint public unitsSupply;
-  uint public boxedUnits;
+  uint public unitsRequested;
+  uint public unitsMinted;
   EnumerableSet.UintSet private lootboxTypes;
   EnumerableSet.AddressSet private suppliers;
   EnumerableSet.AddressSet private allowedTokens; // Tokens allowed for rewards.
@@ -157,6 +158,9 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
 
   /// @notice The amount to open exceeds the supply
   error SupplyExceeded(uint256 supply, uint256 unitsToGet);
+
+  /// @notice The new supply amount is less than already requested to open
+  error InsufficientSupply(uint256 supply, uint256 requested);
 
   /// @notice Has to finish the open request first
   error PendingOpenRequest();
@@ -269,6 +273,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     for (uint i = 0; i < _tokens.length; ++i) {
       currentSupply = _setAmountPerUnit(currentSupply, _tokens[i], _ids[i], _amountsPerUnit[i]);
     }
+    if (currentSupply < unitsRequested) revert InsufficientSupply(currentSupply, unitsRequested);
     unitsSupply = currentSupply;
   }
 
@@ -454,6 +459,10 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     ExtraRewardInfo[] extra;
   }
 
+  function getAvailableSupply() external view returns (uint) {
+    return unitsSupply - unitsRequested;
+  }
+
   function getLootboxTypes() external view returns (uint[] memory) {
     return lootboxTypes.values();
   }
@@ -474,8 +483,8 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     return suppliers.contains(_from);
   }
 
-  function calculateOpenPrice(uint32 _gas, uint _units) external view returns (uint) {
-    uint vrfPrice = VRF_V2_WRAPPER.calculateRequestPrice(_gas);
+  function calculateOpenPrice(uint32 _gas, uint _gasPriceInWei, uint _units) external view returns (uint) {
+    uint vrfPrice = VRF_V2_WRAPPER.estimateRequestPrice(_gas, _gasPriceInWei);
     uint linkPrice = _getLinkPrice();
     uint vrfPriceNative = vrfPrice * linkPrice / LINK_UNIT;
     uint feePerUnit = FACTORY.feePerUnit(address(this));
@@ -812,8 +821,10 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
       unitsToGet += _lootIds[i] * _lootAmounts[i];
     }
     if (unitsToGet == 0) revert ZeroAmount();
-    if (unitsSupply < unitsToGet) revert SupplyExceeded(unitsSupply, unitsToGet);
+    uint unitsAvailable = unitsSupply - unitsRequested;
+    if (unitsAvailable < unitsToGet) revert SupplyExceeded(unitsAvailable, unitsToGet);
 
+    unitsRequested = unitsRequested + unitsToGet;
     uint256 requestId = _requestRandomness(_gas);
 
     requests[requestId] = Request({
@@ -846,6 +857,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     delete openerRequests[requests[_requestId].opener];
     uint256 totalUnits = unitsSupply;
     unitsSupply = totalUnits - unitsToGet;
+    unitsRequested = unitsRequested - unitsToGet;
 
     for (; unitsToGet > 0; --unitsToGet) {
       uint256 target = uint256(keccak256(abi.encodePacked(_randomness, unitsToGet))) % totalUnits;
@@ -980,7 +992,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
         lootboxTypes.add(id);
         unitBoxesAdded = unitBoxesAdded + (id * amounts[i]);
       }
-      boxedUnits = boxedUnits + unitBoxesAdded;
+      unitsMinted = unitsMinted + unitBoxesAdded;
     }
     if (to == address(0)) {
       uint unitBoxesRemoved = 0;
@@ -988,7 +1000,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
       for (uint i = 0; i < len; ++i) {
         unitBoxesRemoved = unitBoxesRemoved + (ids[i] * amounts[i]);
       }
-      boxedUnits = boxedUnits - unitBoxesRemoved;
+      unitsMinted = unitsMinted - unitBoxesRemoved;
     }
     super._afterTokenTransfer(operator, from, to, ids, amounts, data);
   }

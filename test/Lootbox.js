@@ -4,6 +4,7 @@ const { expect } = require('chai');
 const { linkToken, vrfV2Wrapper, linkHolder } = require('../network.config.js')['31337'];
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+const LINK_UNIT = '1000000000000000000';
 const NOT_USED = 0;
 const RewardType = {
   ERC20: 1,
@@ -14,6 +15,7 @@ const RewardType = {
 const safeTransferFrom = 'safeTransferFrom(address,address,uint256)';
 const IERC1155Receiver = '0x4e2312e0';
 const IERC1155 = '0xd9b67a26';
+const REQUEST_GAS_LIMIT = 1000000;
 
 const NFT = (id) => ({
   id,
@@ -31,9 +33,10 @@ describe('Lootbox', function () {
   };
 
   const deployLootbox = async (linkAddress, wrapperAddress) => {
+    const wrapper = wrapperAddress || vrfV2Wrapper;
     const [owner, supplier, user] = await ethers.getSigners();
     const link = await ethers.getContractAt('LinkTokenInterface', linkAddress || linkToken);
-    const factory = await deploy('LootboxFactory', owner, link.address, wrapperAddress || vrfV2Wrapper);
+    const factory = await deploy('LootboxFactory', owner, link.address, wrapper);
 
     const impersonatedLinkHolder = await ethers.getImpersonatedSigner(linkHolder);
     await link.connect(impersonatedLinkHolder)
@@ -46,6 +49,11 @@ describe('Lootbox', function () {
     await factory.deployLootbox('someUri', 0);
     const deployedLootbox = await factory.getLootbox(owner.address, 0);
     const lootbox = await ethers.getContractAt('Lootbox', deployedLootbox);
+    const ethLinkFeedAddress = await lootbox.LINK_ETH_FEED();
+    const ethLinkFeed = await ethers.getContractAt('AggregatorV3Interface', ethLinkFeedAddress);
+    const ethLinkPrice = (await ethLinkFeed.latestRoundData())[1];
+    const vrfWrapper = await ethers.getContractAt('IVRFV2Wrapper', wrapper);
+    const vrfPrice1M = await vrfWrapper.estimateRequestPrice(REQUEST_GAS_LIMIT, network.config.gasPrice);
 
     const ADMIN = await lootbox.DEFAULT_ADMIN_ROLE();
     const MINTER = await lootbox.MINTER_ROLE();
@@ -57,7 +65,7 @@ describe('Lootbox', function () {
     const erc1155NFT = await deploy('MockERC1155NFT', supplier, 15);
 
     return { factory, lootbox, link, ADMIN, MINTER, PAUSER,
-      erc20, erc721, erc1155, erc1155NFT };
+      erc20, erc721, erc1155, erc1155NFT, ethLinkPrice, vrfPrice1M };
   };
 
   const listRoleMembers = async (contract, role) => {
@@ -123,6 +131,8 @@ describe('Lootbox', function () {
     expect(await lootbox.getAllowedTokens()).to.eql([]);
     expect(await lootbox.getInventory()).to.eql([[], []]);
     expect(await lootbox.unitsSupply()).to.equal(0);
+    expect(await lootbox.unitsRequested()).to.equal(0);
+    expect(await lootbox.unitsMinted()).to.equal(0);
   });
 
   it('should allow admin to set base URI', async function () {
@@ -292,6 +302,21 @@ describe('Lootbox', function () {
 
   it.skip('should restrict others to withdraw assets', async function () {});
 
+  it('should take into account requested units when setting amounts per unit', async function () {
+      const { lootbox, erc20, link, vrfPrice1M, factory } = await loadFixture(deployLootbox);
+      const [owner, supplier, user] = await ethers.getSigners();
+      await lootbox.mintBatch(user.address, [1, 2], [4, 3], '0x');
+      await lootbox.addTokens([erc20.address]);
+      await erc20.connect(supplier).transfer(lootbox.address, 100);
+      await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+      await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [10]);
+      const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 8);
+      await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1, 2], [2, 3], {value: price});
+      await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [12]);
+      await expect(lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [13]))
+        .to.be.revertedWithCustomError(lootbox, 'InsufficientSupply')
+        .withArgs(7, 8);
+    });
   it('should restrict admin to set amounts per unit for a disallowed token', async function () {
     const { lootbox, erc20 } = await loadFixture(deployLootbox);
     const [owner, supplier] = await ethers.getSigners();
@@ -1837,17 +1862,17 @@ describe('Lootbox', function () {
     const [minter, other, user] = await ethers.getSigners();
     await lootbox.mint(user.address, 1, 10, '0x');
     expect(await lootbox.balanceOf(user.address, 1)).to.equal(10);
-    expect(await lootbox.boxedUnits()).to.equal(10);
+    expect(await lootbox.unitsMinted()).to.equal(10);
     await lootbox.mintBatch(user.address, [2], [4], '0x');
     expect(await lootbox.balanceOf(user.address, 1)).to.equal(10);
     expect(await lootbox.balanceOf(user.address, 2)).to.equal(4);
-    expect(await lootbox.boxedUnits()).to.equal(18);
+    expect(await lootbox.unitsMinted()).to.equal(18);
     await lootbox.grantRole(MINTER, other.address);
     await lootbox.connect(other).mintBatch(user.address, [3, 1], [4, 2], '0x');
     expect(await lootbox.balanceOf(user.address, 1)).to.equal(12);
     expect(await lootbox.balanceOf(user.address, 2)).to.equal(4);
     expect(await lootbox.balanceOf(user.address, 3)).to.equal(4);
-    expect(await lootbox.boxedUnits()).to.equal(32);
+    expect(await lootbox.unitsMinted()).to.equal(32);
   });
   it('should restrict others to mint lootboxes', async function () {
     const { lootbox } = await loadFixture(deployLootbox);
@@ -1890,7 +1915,15 @@ describe('Lootbox', function () {
     await expectLootboxTypes(lootbox, [3, 1, 2, 4]);
   });
 
-  it.only('should calculate open price based on the gas, VRF and LINK price and fee per unit', async function () {});
+  it('should calculate open price based on the gas, VRF and LINK price and fee per unit', async function () {
+    const { lootbox, ethLinkPrice, vrfPrice1M, factory } = await loadFixture(deployLootbox);
+    const expectedVRFPrice = vrfPrice1M.mul(ethLinkPrice).div(LINK_UNIT);
+    expect(await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 0)).to.equal(expectedVRFPrice);
+    expect(await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 10)).to.equal(expectedVRFPrice);
+    await factory.setFeePerUnit(lootbox.address, 1000);
+    expect(await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 0)).to.equal(expectedVRFPrice);
+    expect(await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 10)).to.equal(expectedVRFPrice.add('10000'));
+  });
 
   it.skip('should recover lootboxes from an own failed open request', async function () {});
   it.skip('should recover lootboxes from another opener failed request', async function () {});
@@ -1901,10 +1934,10 @@ describe('Lootbox', function () {
   it.skip('should claim own allocated rewards', async function () {});
   it.skip('should claim another opener allocated rewards', async function () {});
   it.skip('should restrict claiming if paused', async function () {});
-  it.skip('should claim another opener allocated ERC20 rewards', async function () {});
-  it.skip('should claim another opener allocated ERC721 rewards', async function () {});
-  it.skip('should claim another opener allocated ERC1155 NFT rewards', async function () {});
-  it.skip('should claim another opener allocated ERC1155 rewards', async function () {});
+  it.skip('should claim for another opener allocated ERC20 rewards', async function () {});
+  it.skip('should claim for another opener allocated ERC721 rewards', async function () {});
+  it.skip('should claim for another opener allocated ERC1155 NFT rewards', async function () {});
+  it.skip('should claim for another opener allocated ERC1155 rewards', async function () {});
 
   it.skip('should restrict calling allocate rewards for not the contract itself', async function () {});
   it.skip('should restrict calling raw fulfill random words for not the VRF_V2_WRAPPER', async function () {});
@@ -1912,23 +1945,15 @@ describe('Lootbox', function () {
   it.skip('should restrict rewards allocation for an absent request', async function () {});
   it.skip('should restrict rewards allocation for a fulfilled request', async function () {});
 
-  it.skip('should allow LINK as ERC677 transfer and call to create an open request', async function () {});
-  it.skip('should restrict other tokens as ERC677 transfer and call', async function () {});
-  it.skip('should restrict to create an open request with LINK payment less than VRF price', async function () {});
-  it.skip('should restrict to create an open request with LINK payment less than VRF price plus LINK factory fee', async function () {});
-  it.skip('should forward the open fee in LINK to the factory when creating an open request', async function () {});
-  it.skip('should not forward a zero fee in LINK to the factory when creating an open request', async function () {});
-  it.skip('should return the excess LINK to the opener when creating an open request', async function () {});
+  describe.skip('LINK payment', function() {
+    it.skip('should allow LINK as ERC677 transfer and call to create an open request', async function () {});
+    it.skip('should restrict other tokens as ERC677 transfer and call', async function () {});
+    it.skip('should restrict to create an open request with LINK payment less than VRF price', async function () {});
+    it.skip('should restrict to create an open request with LINK payment less than VRF price plus LINK factory fee', async function () {});
+    it.skip('should forward the open fee in LINK to the factory when creating an open request', async function () {});
+    it.skip('should not forward a zero fee in LINK to the factory when creating an open request', async function () {});
+    it.skip('should return the excess LINK to the opener when creating an open request', async function () {});
 
-  it.skip('should allow native currency payment to create an open request', async function () {});
-  it.skip('should restrict native currency deposit outside of open function', async function () {});
-  it.skip('should restrict to create an open request with native payment less than VRF native price', async function () {});
-  it.skip('should restrict to create an open request with native payment less than VRF native price plus factory fee', async function () {});
-  it.skip('should forward the native open fee to the factory when creating an open request', async function () {});
-  it.skip('should not forward a zero native fee in to the factory when creating an open request', async function () {});
-  it.skip('should return the excess native payment to the opener when creating an open request', async function () {});
-
-  describe('LINK payment', function() {
     it.skip('should restrict more then one pending open request per opener', async function () {});
     it.skip('should restrict open request with less than 100,000 gas for VRF request', async function () {});
     it.skip('should restrict open request when paused', async function () {});
@@ -1946,12 +1971,217 @@ describe('Lootbox', function () {
   });
 
   describe('Native currency payment', function() {
-    it.skip('should restrict more then one pending open request per opener', async function () {});
-    it.skip('should restrict open request with less than 100,000 gas for VRF request', async function () {});
-    it.skip('should restrict open request when paused', async function () {});
-    it.skip('should restrict open with zero total units', async function () {});
-    it.skip('should restrict open with total units less than supply', async function () {});
-    it.skip('should burn boxes specified in open request', async function () {});
+    it('should allow native currency payment to create an open request', async function () {
+      const { lootbox, erc20, link, vrfPrice1M, factory } = await loadFixture(deployLootbox);
+      const [owner, supplier, user] = await ethers.getSigners();
+      await lootbox.mint(user.address, 1, 1, '0x');
+      await lootbox.addTokens([erc20.address]);
+      await erc20.connect(supplier).transfer(lootbox.address, 100);
+      await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+      await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [10]);
+      const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 1);
+      const tx = lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [1], {value: price});
+      await tx;
+      const requestId = await lootbox.openerRequests(user.address);
+      await expect(tx).to.emit(lootbox, 'OpenRequested')
+        .withArgs(user.address, 1, requestId);
+      await expect(tx).to.changeEtherBalance(user.address, price.mul('-1'));
+      await expect(tx).to.changeEtherBalance(factory.address, 0);
+      await expect(tx).to.changeEtherBalance(lootbox.address, price);
+      await expect(tx).to.changeTokenBalance(link, lootbox.address, vrfPrice1M.mul('-1'));
+    });
+    it('should restrict native currency deposit outside of open function', async function () {
+      const { lootbox } = await loadFixture(deployLootbox);
+      const [owner] = await ethers.getSigners();
+      await expect(owner.sendTransaction({to: lootbox.address, value: 1}))
+        .to.be.reverted;
+    });
+    it('should restrict to create an open request with native payment less than VRF native price', async function () {
+      const { lootbox, erc20, link, factory } = await loadFixture(deployLootbox);
+      const [owner, supplier, user] = await ethers.getSigners();
+      await lootbox.mint(user.address, 1, 1, '0x');
+      await lootbox.addTokens([erc20.address]);
+      await erc20.connect(supplier).transfer(lootbox.address, 100);
+      await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+      await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [10]);
+      const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 1);
+      await expect(lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [1], {value: price.sub('1')}))
+        .to.be.revertedWithCustomError(lootbox, 'InsufficientPayment');
+    });
+    it('should restrict to create an open request with native payment less than VRF native price plus factory fee', async function () {
+      const { lootbox, erc20, link, factory } = await loadFixture(deployLootbox);
+      const [owner, supplier, user] = await ethers.getSigners();
+      await lootbox.mint(user.address, 1, 1, '0x');
+      await lootbox.addTokens([erc20.address]);
+      await erc20.connect(supplier).transfer(lootbox.address, 100);
+      await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+      await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [10]);
+      await factory.setFeePerUnit(lootbox.address, 1);
+      const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 1);
+      await expect(lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [1], {value: price.sub('1')}))
+        .to.be.revertedWithCustomError(lootbox, 'InsufficientFee');
+    });
+    it('should forward the native open fee to the factory when creating an open request', async function () {
+      const { lootbox, erc20, link, factory } = await loadFixture(deployLootbox);
+      const [owner, supplier, user] = await ethers.getSigners();
+      await lootbox.mint(user.address, 1, 1, '0x');
+      await lootbox.addTokens([erc20.address]);
+      await erc20.connect(supplier).transfer(lootbox.address, 100);
+      await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+      await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [10]);
+      await factory.setFeePerUnit(lootbox.address, 1);
+      const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 1);
+      const tx = lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [1], {value: price});
+      await expect(tx).to.changeEtherBalance(user.address, price.mul('-1'));
+      await expect(tx).to.changeEtherBalance(factory.address, 1);
+      await expect(tx).to.changeEtherBalance(lootbox.address, price.sub('1'));
+    });
+    it('should not forward a zero native fee in to the factory when creating an open request', async function () {
+      const { lootbox, erc20, link, factory } = await loadFixture(deployLootbox);
+      const [owner, supplier, user] = await ethers.getSigners();
+      await lootbox.mint(user.address, 1, 1, '0x');
+      await lootbox.addTokens([erc20.address]);
+      await erc20.connect(supplier).transfer(lootbox.address, 100);
+      await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+      await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [10]);
+      const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 1);
+      const tx = lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [1], {value: price});
+      await expect(tx).to.not.emit(factory, 'Payment');
+    });
+    it('should return the excess native payment to the opener when creating an open request without factory fee', async function () {
+      const { lootbox, erc20, link, factory } = await loadFixture(deployLootbox);
+      const [owner, supplier, user] = await ethers.getSigners();
+      await lootbox.mint(user.address, 1, 1, '0x');
+      await lootbox.addTokens([erc20.address]);
+      await erc20.connect(supplier).transfer(lootbox.address, 100);
+      await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+      await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [10]);
+      const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 1);
+      const tx = lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [1], {value: price.add('7')});
+      await expect(tx).to.changeEtherBalance(user.address, price.mul('-1'));
+      await expect(tx).to.changeEtherBalance(factory.address, 0);
+    });
+    it('should return the excess native payment to the opener when creating an open request with factory fee', async function () {
+      const { lootbox, erc20, link, factory } = await loadFixture(deployLootbox);
+      const [owner, supplier, user] = await ethers.getSigners();
+      await lootbox.mint(user.address, 1, 1, '0x');
+      await lootbox.addTokens([erc20.address]);
+      await erc20.connect(supplier).transfer(lootbox.address, 100);
+      await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+      await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [10]);
+      await factory.setFeePerUnit(lootbox.address, 1);
+      const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 1);
+      const tx = lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [1], {value: price.add('7')});
+      await expect(tx).to.changeEtherBalance(user.address, price.mul('-1'));
+      await expect(tx).to.changeEtherBalance(factory.address, 1);
+    });
+
+    it('should restrict more then one pending open request per opener', async function () {
+      const { lootbox, erc20, link, factory } = await loadFixture(deployLootbox);
+      const [owner, supplier, user] = await ethers.getSigners();
+      await lootbox.mint(user.address, 1, 2, '0x');
+      await lootbox.addTokens([erc20.address]);
+      await erc20.connect(supplier).transfer(lootbox.address, 100);
+      await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+      await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [10]);
+      const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 1);
+      await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [1], {value: price});
+      await expect(lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [1], {value: price}))
+        .to.be.revertedWithCustomError(lootbox, 'PendingOpenRequest');
+    });
+    it('should restrict open request with less than 100,000 gas for VRF request', async function () {
+      const { lootbox, erc20, link, factory } = await loadFixture(deployLootbox);
+      const [owner, supplier, user] = await ethers.getSigners();
+      await lootbox.mint(user.address, 1, 1, '0x');
+      await lootbox.addTokens([erc20.address]);
+      await erc20.connect(supplier).transfer(lootbox.address, 100);
+      await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+      await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [10]);
+      const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 1);
+      await expect(lootbox.connect(user).open(99999, [1], [1], {value: price}))
+        .to.be.revertedWithCustomError(lootbox, 'InsufficientGas');
+    });
+    it('should restrict open request when paused', async function () {
+      const { lootbox, erc20, link, factory } = await loadFixture(deployLootbox);
+      const [owner, supplier, user] = await ethers.getSigners();
+      await lootbox.mint(user.address, 1, 1, '0x');
+      await lootbox.addTokens([erc20.address]);
+      await erc20.connect(supplier).transfer(lootbox.address, 100);
+      await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+      await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [10]);
+      const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 1);
+      await lootbox.pause();
+      await expect(lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [1], {value: price}))
+        .to.be.revertedWith(/Pausable/);
+    });
+    it('should restrict open with zero total units', async function () {
+      const { lootbox, erc20, link, factory } = await loadFixture(deployLootbox);
+      const [owner, supplier, user] = await ethers.getSigners();
+      await lootbox.mint(user.address, 1, 1, '0x');
+      await lootbox.addTokens([erc20.address]);
+      await erc20.connect(supplier).transfer(lootbox.address, 100);
+      await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+      const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 1);
+      await expect(lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [1], {value: price}))
+        .to.be.revertedWithCustomError(lootbox, 'SupplyExceeded')
+        .withArgs(0, 1);
+    });
+    it('should restrict open with total units less than supply', async function () {
+      const { lootbox, erc20, link, factory } = await loadFixture(deployLootbox);
+      const [owner, supplier, user] = await ethers.getSigners();
+      await lootbox.mint(user.address, 1, 11, '0x');
+      await lootbox.addTokens([erc20.address]);
+      await erc20.connect(supplier).transfer(lootbox.address, 100);
+      await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+      await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [10]);
+      const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 11);
+      await expect(lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [11], {value: price}))
+        .to.be.revertedWithCustomError(lootbox, 'SupplyExceeded')
+        .withArgs(10, 11);
+    });
+    it('should restrict open zero units', async function () {
+      const { lootbox, erc20, link, factory } = await loadFixture(deployLootbox);
+      const [owner, supplier, user] = await ethers.getSigners();
+      await lootbox.mint(user.address, 1, 1, '0x');
+      await lootbox.addTokens([erc20.address]);
+      await erc20.connect(supplier).transfer(lootbox.address, 100);
+      await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+      await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [10]);
+      const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 0);
+      await expect(lootbox.connect(user).open(REQUEST_GAS_LIMIT, [], [], {value: price}))
+        .to.be.revertedWithCustomError(lootbox, 'ZeroAmount');
+    });
+    it('should burn boxes specified in open request', async function () {
+      const { lootbox, erc20, link, vrfPrice1M, factory } = await loadFixture(deployLootbox);
+      const [owner, supplier, user] = await ethers.getSigners();
+      await lootbox.mint(user.address, 1, 1, '0x');
+      await lootbox.addTokens([erc20.address]);
+      await erc20.connect(supplier).transfer(lootbox.address, 100);
+      await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+      await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [10]);
+      const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 1);
+      await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [1], {value: price});
+      expect(await lootbox.balanceOf(user.address, 1)).to.equal(0);
+      expect(await lootbox.unitsSupply()).to.equal(10);
+      expect(await lootbox.unitsRequested()).to.equal(1);
+      expect(await lootbox.getAvailableSupply()).to.equal(9);
+    });
+    it('should burn multiple boxes specified in open request', async function () {
+      const { lootbox, erc20, link, vrfPrice1M, factory } = await loadFixture(deployLootbox);
+      const [owner, supplier, user] = await ethers.getSigners();
+      await lootbox.mintBatch(user.address, [1, 2], [4, 3], '0x');
+      await lootbox.addTokens([erc20.address]);
+      await erc20.connect(supplier).transfer(lootbox.address, 100);
+      await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+      await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [10]);
+      const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 8);
+      await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1, 2], [2, 3], {value: price});
+      expect(await lootbox.balanceOf(user.address, 1)).to.equal(2);
+      expect(await lootbox.balanceOf(user.address, 2)).to.equal(0);
+      expect(await lootbox.unitsSupply()).to.equal(10);
+      expect(await lootbox.unitsRequested()).to.equal(8);
+      expect(await lootbox.getAvailableSupply()).to.equal(2);
+    });
 
     it.skip('should allocate ERC20 rewards', async function () {});
     it.skip('should allocate ERC721 rewards', async function () {});
