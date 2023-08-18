@@ -134,6 +134,13 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   /// @param amount The amount of claimed tokens
   event RewardsClaimed(address opener, address token, uint tokenId, uint amount);
 
+  /// @notice Emitted when the lootbox rewards are allocated
+  /// @param opener The address of the user that received the allocation
+  /// @param token The rewarded token contract address
+  /// @param tokenId The internal tokenId for ERC721 and ERC1155
+  /// @param amount The amount of allocated tokens
+  event Allocated(address opener, address token, uint tokenId, uint amount);
+
   /*//////////////////////////////////////////////////////////////
                                 ERRORS
   //////////////////////////////////////////////////////////////*/
@@ -400,7 +407,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
         allocationInfo[_opener][token].amount[0] = 0;
         allocated[token][0] = allocated[token][0] - amount;
         IERC20(token).safeTransfer(_opener, amount);
-        emit RewardsClaimed(_opener, token, 0, 1);
+        emit RewardsClaimed(_opener, token, 0, amount);
       }
       else {
         uint tokenIds = allocationInfo[_opener][token].ids.length();
@@ -849,12 +856,13 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     uint256 _randomness
   ) external {
     if (msg.sender != address(this)) revert OnlyThis();
+    address opener = requests[_requestId].opener;
     mapping(address => Lootbox.AllocationInfo) storage openerAllocation =
-      allocationInfo[requests[_requestId].opener];
+      allocationInfo[opener];
     uint unitsToGet = requests[_requestId].unitsToGet;
     if (unitsToGet == 0) revert InvalidRequestAllocation(_requestId);
     delete requests[_requestId];
-    delete openerRequests[requests[_requestId].opener];
+    delete openerRequests[opener];
     uint256 totalUnits = unitsSupply;
     unitsSupply = totalUnits - unitsToGet;
     unitsRequested = unitsRequested - unitsToGet;
@@ -880,6 +888,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
           if (rewardType == RewardType.ERC20) {
             openerAllocation[token].amount[0] += amount;
             allocated[token][0] += amount;
+            emit Allocated(opener, token, 0, amount);
           }
           else if (rewardType == RewardType.ERC721 || rewardType == RewardType.ERC1155NFT) {
             uint ids = rewards[token].ids.length();
@@ -889,6 +898,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
               rewards[token].ids.remove(tokenId);
               --ids;
               openerAllocation[token].ids.add(tokenId);
+              emit Allocated(opener, token, tokenId, 1);
             }
           }
           else if (rewardType == RewardType.ERC1155) {
@@ -912,6 +922,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
                     leftoversExtraIds[token].add(id);
                   }
                 }
+                emit Allocated(opener, token, id, amount);
                 break;
               }
 

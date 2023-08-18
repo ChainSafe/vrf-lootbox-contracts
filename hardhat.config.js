@@ -313,7 +313,8 @@ module.exports = {
     },
     hardhat: {
       allowUnlimitedContractSize: true,
-      gasPrice: 20000000000,
+      gasPrice: 100000000000,
+      gas: 20000000,
       forking: {
         url: 'https://cloudflare-eth.com',
       },
