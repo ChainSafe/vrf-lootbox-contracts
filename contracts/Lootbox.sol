@@ -114,7 +114,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
 
   /// @notice Emitted when a randomness request ran out of gas and now must be recovered
   /// @param requestId The ID of the VRF request
-  event OpenRequestFailed(uint256 requestId);
+  event OpenRequestFailed(uint256 requestId, bytes reason);
 
   event SupplierAdded(address supplier);
 
@@ -411,11 +411,9 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
       }
       else {
         uint tokenIds = allocationInfo[_opener][token].ids.length();
-        if (tokenIds == 0) {
-          continue;
-        }
-        for (uint j = tokenIds - 1; j >= 0; --j) {
-          uint tokenId = allocationInfo[_opener][token].ids.at(j);
+        while(tokenIds > 0) {
+          uint nextIndex = --tokenIds;
+          uint tokenId = allocationInfo[_opener][token].ids.at(nextIndex);
           allocationInfo[_opener][token].ids.remove(tokenId);
           if (rewardType == RewardType.ERC721) {
             IERC721(token).safeTransferFrom(address(this), _opener, tokenId);
@@ -664,9 +662,9 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   function fulfillRandomWords(uint256 requestId, uint256[] memory randomWords) internal override {
     try this._allocateRewards{gas: gasleft() - 20000}(requestId, randomWords[0]) {
       emit OpenRequestFulfilled(requestId, randomWords[0]);
-    } catch {
+    } catch (bytes memory reason) {
       requests[requestId].unitsToGet = 0;
-      emit OpenRequestFailed(requestId);
+      emit OpenRequestFailed(requestId, reason);
     }
   }
 

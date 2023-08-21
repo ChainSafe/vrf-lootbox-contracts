@@ -58,7 +58,9 @@ describe('Lootbox', function () {
     const vrfWrapper = await ethers.getContractAt('IVRFV2Wrapper', wrapper);
     const vrfPrice1M = await vrfWrapper.estimateRequestPrice(REQUEST_GAS_LIMIT, network.config.gasPrice);
     const vrfCoordinator = await ethers.getImpersonatedSigner(await vrfWrapper.COORDINATOR());
+    const vrfWrapperSigner = await ethers.getImpersonatedSigner(vrfWrapper.address);
     await setBalance(vrfCoordinator.address, ethers.utils.parseUnits('100'));
+    await setBalance(vrfWrapperSigner.address, ethers.utils.parseUnits('100'));
 
     const ADMIN = await lootbox.DEFAULT_ADMIN_ROLE();
     const MINTER = await lootbox.MINTER_ROLE();
@@ -71,7 +73,7 @@ describe('Lootbox', function () {
 
     return { factory, lootbox, link, ADMIN, MINTER, PAUSER,
       erc20, erc721, erc1155, erc1155NFT, ethLinkPrice, vrfPrice1M,
-      vrfWrapper, vrfCoordinator };
+      vrfWrapper, vrfCoordinator, vrfWrapperSigner };
   };
 
   const listRoleMembers = async (contract, role) => {
@@ -1935,19 +1937,669 @@ describe('Lootbox', function () {
   it.skip('should not recover lootboxes if the request is not failed for an opener', async function () {});
   it.skip('should not recover lootboxes after a successful recovery', async function () {});
 
-  it.skip('should claim own allocated rewards', async function () {});
-  it.skip('should claim another opener allocated rewards', async function () {});
-  it.skip('should restrict claiming if paused', async function () {});
-  it.skip('should claim for another opener allocated ERC20 rewards', async function () {});
-  it.skip('should claim for another opener allocated ERC721 rewards', async function () {});
-  it.skip('should claim for another opener allocated ERC1155 NFT rewards', async function () {});
-  it.skip('should claim for another opener allocated ERC1155 rewards', async function () {});
+  it('should claim own allocated rewards', async function () {
+    const { lootbox, erc20, erc721, erc1155NFT, erc1155, link, vrfWrapper, vrfCoordinator } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    const erc20extra = await deploy('MockERC20', supplier, 100000);
+    const erc721extra = await deploy('MockERC721', supplier, 20);
+    const erc1155extra = await deploy('MockERC1155', supplier, 10, 1000);
+    const erc1155NFTextra = await deploy('MockERC1155NFT', supplier, 15);
+    await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+    await lootbox.mintBatch(user.address, [1, 2], [4, 3], '0x');
+    await lootbox.addTokens([erc20.address, erc721.address, erc1155NFT.address, erc1155.address]);
+    await lootbox.addTokens([erc20extra.address, erc721extra.address, erc1155NFTextra.address, erc1155extra.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc20.connect(supplier).transfer(lootbox.address, 100);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 0);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 1);
+    await erc1155NFT.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [2, 3], [1, 1], '0x');
+    await erc1155.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [4, 5], [30, 50], '0x');
+    await erc20extra.connect(supplier).transfer(lootbox.address, 100);
+    await erc721extra.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 0);
+    await erc721extra.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 1);
+    await erc1155NFTextra.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [2, 3], [1, 1], '0x');
+    await erc1155extra.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [4, 5], [30, 50], '0x');
+    await lootbox.setAmountsPerUnit(
+      [erc20.address, erc721.address, erc1155NFT.address, erc1155.address, erc1155.address],
+      [0, 0, 0, 4, 5], [25, 2, 2, 15, 25]
+    );
+    await lootbox.setAmountsPerUnit(
+      [erc20extra.address, erc721extra.address, erc1155NFTextra.address],
+      [0, 0, 0], [0, 0, 0]
+    );
+    let price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 3);
+    await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1, 2], [1, 1], {value: price});
+    let requestId = await lootbox.openerRequests(user.address);
+    await vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [7]);
+    let tx = lootbox.connect(user).claimRewards(user.address);
+    await expectContractEvents(tx, lootbox, [
+      ['RewardsClaimed', user.address, erc20.address, 0, 25],
+      ['RewardsClaimed', user.address, erc1155.address, 5, 25],
+      ['RewardsClaimed', user.address, erc1155.address, 4, 15],
+    ]);
+    expect(await erc20.balanceOf(user.address)).to.equal(25);
+    expect(await erc1155.balanceOf(user.address, 5)).to.equal(25);
+    expect(await erc1155.balanceOf(user.address, 4)).to.equal(15);
+    await expectInventory(lootbox, [{
+      rewardToken: erc20.address,
+      rewardType: RewardType.ERC20,
+      units: 3,
+      amountPerUnit: 25,
+      balance: 75,
+      extra: [],
+    }, {
+      rewardToken: erc721.address,
+      rewardType: RewardType.ERC721,
+      units: 1,
+      amountPerUnit: 2,
+      balance: NOT_USED,
+      extra: [NFT(0), NFT(1)],
+    }, {
+      rewardToken: erc1155NFT.address,
+      rewardType: RewardType.ERC1155NFT,
+      units: 1,
+      amountPerUnit: 2,
+      balance: NOT_USED,
+      extra: [NFT(2), NFT(3)],
+    }, {
+      rewardToken: erc1155.address,
+      rewardType: RewardType.ERC1155,
+      units: 2,
+      amountPerUnit: 0,
+      balance: NOT_USED,
+      extra: [{
+        id: 4,
+        units: 1,
+        amountPerUnit: 15,
+        balance: 15,
+      }, {
+        id: 5,
+        units: 1,
+        amountPerUnit: 25,
+        balance: 25,
+      }],
+    }], [{
+      rewardToken: erc20extra.address,
+      rewardType: RewardType.ERC20,
+      units: NOT_USED,
+      amountPerUnit: 0,
+      balance: 100,
+      extra: [],
+    }, {
+      rewardToken: erc721extra.address,
+      rewardType: RewardType.ERC721,
+      units: NOT_USED,
+      amountPerUnit: 0,
+      balance: NOT_USED,
+      extra: [NFT(0), NFT(1)],
+    }, {
+      rewardToken: erc1155NFTextra.address,
+      rewardType: RewardType.ERC1155NFT,
+      units: NOT_USED,
+      amountPerUnit: 0,
+      balance: NOT_USED,
+      extra: [NFT(2), NFT(3)],
+    }, {
+      rewardToken: erc1155extra.address,
+      rewardType: RewardType.ERC1155,
+      units: NOT_USED,
+      amountPerUnit: 0,
+      balance: NOT_USED,
+      extra: [{
+        id: 4,
+        units: NOT_USED,
+        amountPerUnit: 0,
+        balance: 30,
+      }, {
+        id: 5,
+        units: NOT_USED,
+        amountPerUnit: 0,
+        balance: 50,
+      }],
+    }]);
+    expect(await lootbox.balanceOf(user.address, 1)).to.equal(3);
+    expect(await lootbox.balanceOf(user.address, 2)).to.equal(2);
+    expect(await lootbox.unitsSupply()).to.equal(7);
+    expect(await lootbox.unitsRequested()).to.equal(0);
+    expect(await lootbox.getAvailableSupply()).to.equal(7);
+    price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 7);
+    await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1, 2], [3, 2], {value: price});
+    requestId = await lootbox.openerRequests(user.address);
+    await vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [9]);
+    tx = lootbox.connect(user).claimRewards(user.address);
+    await expectContractEvents(tx, lootbox, [
+      ['RewardsClaimed', user.address, erc20.address, 0, 75],
+      ['RewardsClaimed', user.address, erc721.address, 0, 1],
+      ['RewardsClaimed', user.address, erc721.address, 1, 1],
+      ['RewardsClaimed', user.address, erc1155NFT.address, 2, 1],
+      ['RewardsClaimed', user.address, erc1155NFT.address, 3, 1],
+      ['RewardsClaimed', user.address, erc1155.address, 4, 15],
+      ['RewardsClaimed', user.address, erc1155.address, 5, 25],
+    ]);
+    expect(await erc20.balanceOf(user.address)).to.equal(100);
+    expect(await erc1155.balanceOf(user.address, 5)).to.equal(50);
+    expect(await erc1155.balanceOf(user.address, 4)).to.equal(30);
+    expect(await erc1155NFT.balanceOf(user.address, 3)).to.equal(1);
+    expect(await erc1155NFT.balanceOf(user.address, 2)).to.equal(1);
+    expect(await erc721.ownerOf(0)).to.equal(user.address);
+    expect(await erc721.ownerOf(1)).to.equal(user.address);
+    await expectInventory(lootbox, [], [{
+      rewardToken: erc20extra.address,
+      rewardType: RewardType.ERC20,
+      units: NOT_USED,
+      amountPerUnit: 0,
+      balance: 100,
+      extra: [],
+    }, {
+      rewardToken: erc721extra.address,
+      rewardType: RewardType.ERC721,
+      units: NOT_USED,
+      amountPerUnit: 0,
+      balance: NOT_USED,
+      extra: [NFT(0), NFT(1)],
+    }, {
+      rewardToken: erc1155NFTextra.address,
+      rewardType: RewardType.ERC1155NFT,
+      units: NOT_USED,
+      amountPerUnit: 0,
+      balance: NOT_USED,
+      extra: [NFT(2), NFT(3)],
+    }, {
+      rewardToken: erc1155extra.address,
+      rewardType: RewardType.ERC1155,
+      units: NOT_USED,
+      amountPerUnit: 0,
+      balance: NOT_USED,
+      extra: [{
+        id: 4,
+        units: NOT_USED,
+        amountPerUnit: 0,
+        balance: 30,
+      }, {
+        id: 5,
+        units: NOT_USED,
+        amountPerUnit: 0,
+        balance: 50,
+      }],
+    }]);
+    expect(await lootbox.balanceOf(user.address, 1)).to.equal(0);
+    expect(await lootbox.balanceOf(user.address, 2)).to.equal(0);
+    expect(await lootbox.unitsSupply()).to.equal(0);
+    expect(await lootbox.unitsRequested()).to.equal(0);
+    expect(await lootbox.getAvailableSupply()).to.equal(0);
+  });
+  it('should claim another opener allocated rewards', async function () {
+    const { lootbox, erc20, erc721, erc1155NFT, erc1155, link, vrfWrapper, vrfCoordinator } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    const erc20extra = await deploy('MockERC20', supplier, 100000);
+    const erc721extra = await deploy('MockERC721', supplier, 20);
+    const erc1155extra = await deploy('MockERC1155', supplier, 10, 1000);
+    const erc1155NFTextra = await deploy('MockERC1155NFT', supplier, 15);
+    await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+    await lootbox.mintBatch(user.address, [1, 2], [4, 3], '0x');
+    await lootbox.addTokens([erc20.address, erc721.address, erc1155NFT.address, erc1155.address]);
+    await lootbox.addTokens([erc20extra.address, erc721extra.address, erc1155NFTextra.address, erc1155extra.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc20.connect(supplier).transfer(lootbox.address, 100);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 0);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 1);
+    await erc1155NFT.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [2, 3], [1, 1], '0x');
+    await erc1155.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [4, 5], [30, 50], '0x');
+    await erc20extra.connect(supplier).transfer(lootbox.address, 100);
+    await erc721extra.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 0);
+    await erc721extra.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 1);
+    await erc1155NFTextra.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [2, 3], [1, 1], '0x');
+    await erc1155extra.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [4, 5], [30, 50], '0x');
+    await lootbox.setAmountsPerUnit(
+      [erc20.address, erc721.address, erc1155NFT.address, erc1155.address, erc1155.address],
+      [0, 0, 0, 4, 5], [25, 2, 2, 15, 25]
+    );
+    await lootbox.setAmountsPerUnit(
+      [erc20extra.address, erc721extra.address, erc1155NFTextra.address],
+      [0, 0, 0], [0, 0, 0]
+    );
+    let price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 3);
+    await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1, 2], [1, 1], {value: price});
+    let requestId = await lootbox.openerRequests(user.address);
+    await vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [7]);
+    let tx = lootbox.connect(supplier).claimRewards(user.address);
+    await expectContractEvents(tx, lootbox, [
+      ['RewardsClaimed', user.address, erc20.address, 0, 25],
+      ['RewardsClaimed', user.address, erc1155.address, 5, 25],
+      ['RewardsClaimed', user.address, erc1155.address, 4, 15],
+    ]);
+    expect(await erc20.balanceOf(user.address)).to.equal(25);
+    expect(await erc1155.balanceOf(user.address, 5)).to.equal(25);
+    expect(await erc1155.balanceOf(user.address, 4)).to.equal(15);
+    await expectInventory(lootbox, [{
+      rewardToken: erc20.address,
+      rewardType: RewardType.ERC20,
+      units: 3,
+      amountPerUnit: 25,
+      balance: 75,
+      extra: [],
+    }, {
+      rewardToken: erc721.address,
+      rewardType: RewardType.ERC721,
+      units: 1,
+      amountPerUnit: 2,
+      balance: NOT_USED,
+      extra: [NFT(0), NFT(1)],
+    }, {
+      rewardToken: erc1155NFT.address,
+      rewardType: RewardType.ERC1155NFT,
+      units: 1,
+      amountPerUnit: 2,
+      balance: NOT_USED,
+      extra: [NFT(2), NFT(3)],
+    }, {
+      rewardToken: erc1155.address,
+      rewardType: RewardType.ERC1155,
+      units: 2,
+      amountPerUnit: 0,
+      balance: NOT_USED,
+      extra: [{
+        id: 4,
+        units: 1,
+        amountPerUnit: 15,
+        balance: 15,
+      }, {
+        id: 5,
+        units: 1,
+        amountPerUnit: 25,
+        balance: 25,
+      }],
+    }], [{
+      rewardToken: erc20extra.address,
+      rewardType: RewardType.ERC20,
+      units: NOT_USED,
+      amountPerUnit: 0,
+      balance: 100,
+      extra: [],
+    }, {
+      rewardToken: erc721extra.address,
+      rewardType: RewardType.ERC721,
+      units: NOT_USED,
+      amountPerUnit: 0,
+      balance: NOT_USED,
+      extra: [NFT(0), NFT(1)],
+    }, {
+      rewardToken: erc1155NFTextra.address,
+      rewardType: RewardType.ERC1155NFT,
+      units: NOT_USED,
+      amountPerUnit: 0,
+      balance: NOT_USED,
+      extra: [NFT(2), NFT(3)],
+    }, {
+      rewardToken: erc1155extra.address,
+      rewardType: RewardType.ERC1155,
+      units: NOT_USED,
+      amountPerUnit: 0,
+      balance: NOT_USED,
+      extra: [{
+        id: 4,
+        units: NOT_USED,
+        amountPerUnit: 0,
+        balance: 30,
+      }, {
+        id: 5,
+        units: NOT_USED,
+        amountPerUnit: 0,
+        balance: 50,
+      }],
+    }]);
+    expect(await lootbox.balanceOf(user.address, 1)).to.equal(3);
+    expect(await lootbox.balanceOf(user.address, 2)).to.equal(2);
+    expect(await lootbox.unitsSupply()).to.equal(7);
+    expect(await lootbox.unitsRequested()).to.equal(0);
+    expect(await lootbox.getAvailableSupply()).to.equal(7);
+    price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 7);
+    await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1, 2], [3, 2], {value: price});
+    requestId = await lootbox.openerRequests(user.address);
+    await vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [9]);
+    tx = lootbox.connect(supplier).claimRewards(user.address);
+    await expectContractEvents(tx, lootbox, [
+      ['RewardsClaimed', user.address, erc20.address, 0, 75],
+      ['RewardsClaimed', user.address, erc721.address, 0, 1],
+      ['RewardsClaimed', user.address, erc721.address, 1, 1],
+      ['RewardsClaimed', user.address, erc1155NFT.address, 2, 1],
+      ['RewardsClaimed', user.address, erc1155NFT.address, 3, 1],
+      ['RewardsClaimed', user.address, erc1155.address, 4, 15],
+      ['RewardsClaimed', user.address, erc1155.address, 5, 25],
+    ]);
+    expect(await erc20.balanceOf(user.address)).to.equal(100);
+    expect(await erc1155.balanceOf(user.address, 5)).to.equal(50);
+    expect(await erc1155.balanceOf(user.address, 4)).to.equal(30);
+    expect(await erc1155NFT.balanceOf(user.address, 3)).to.equal(1);
+    expect(await erc1155NFT.balanceOf(user.address, 2)).to.equal(1);
+    expect(await erc721.ownerOf(0)).to.equal(user.address);
+    expect(await erc721.ownerOf(1)).to.equal(user.address);
+    await expectInventory(lootbox, [], [{
+      rewardToken: erc20extra.address,
+      rewardType: RewardType.ERC20,
+      units: NOT_USED,
+      amountPerUnit: 0,
+      balance: 100,
+      extra: [],
+    }, {
+      rewardToken: erc721extra.address,
+      rewardType: RewardType.ERC721,
+      units: NOT_USED,
+      amountPerUnit: 0,
+      balance: NOT_USED,
+      extra: [NFT(0), NFT(1)],
+    }, {
+      rewardToken: erc1155NFTextra.address,
+      rewardType: RewardType.ERC1155NFT,
+      units: NOT_USED,
+      amountPerUnit: 0,
+      balance: NOT_USED,
+      extra: [NFT(2), NFT(3)],
+    }, {
+      rewardToken: erc1155extra.address,
+      rewardType: RewardType.ERC1155,
+      units: NOT_USED,
+      amountPerUnit: 0,
+      balance: NOT_USED,
+      extra: [{
+        id: 4,
+        units: NOT_USED,
+        amountPerUnit: 0,
+        balance: 30,
+      }, {
+        id: 5,
+        units: NOT_USED,
+        amountPerUnit: 0,
+        balance: 50,
+      }],
+    }]);
+    expect(await lootbox.balanceOf(user.address, 1)).to.equal(0);
+    expect(await lootbox.balanceOf(user.address, 2)).to.equal(0);
+    expect(await lootbox.unitsSupply()).to.equal(0);
+    expect(await lootbox.unitsRequested()).to.equal(0);
+    expect(await lootbox.getAvailableSupply()).to.equal(0);
+  });
+  it('should restrict claiming if paused', async function () {
+    const { lootbox, erc20, erc721, erc1155NFT, erc1155, link, vrfWrapper, vrfCoordinator } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+    await lootbox.mintBatch(user.address, [1, 2], [4, 3], '0x');
+    await lootbox.addTokens([erc20.address, erc721.address, erc1155NFT.address, erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc20.connect(supplier).transfer(lootbox.address, 100);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 0);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 1);
+    await erc1155NFT.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [2, 3], [1, 1], '0x');
+    await erc1155.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [4, 5], [30, 50], '0x');
+    await lootbox.setAmountsPerUnit(
+      [erc20.address, erc721.address, erc1155NFT.address, erc1155.address, erc1155.address],
+      [0, 0, 0, 4, 5], [25, 2, 2, 15, 25]
+    );
+    let price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 10);
+    await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1, 2], [4, 3], {value: price});
+    let requestId = await lootbox.openerRequests(user.address);
+    await vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [7]);
+    await lootbox.pause();
+    await expect(lootbox.connect(user).claimRewards(user.address))
+      .to.be.revertedWith(/Pausable/);
+  });
+  it('should claim for another opener allocated ERC20 rewards', async function () {
+    const { lootbox, erc20, link, vrfWrapper, vrfCoordinator } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await lootbox.mintBatch(user.address, [1, 2], [4, 3], '0x');
+    await lootbox.addTokens([erc20.address]);
+    await erc20.connect(supplier).transfer(lootbox.address, 100);
+    await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+    await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [10]);
+    const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 8);
+    await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1, 2], [4, 3], {value: price});
+    const requestId = await lootbox.openerRequests(user.address);
+    await vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [7]);
+    const tx = lootbox.connect(user).claimRewards(user.address);
+    await expectContractEvents(tx, lootbox, [
+      ['RewardsClaimed', user.address, erc20.address, 0, 100],
+    ]);
+    expect(await erc20.balanceOf(user.address)).to.equal(100);
+    await expectInventory(lootbox, [], []);
+    expect(await lootbox.balanceOf(user.address, 1)).to.equal(0);
+    expect(await lootbox.balanceOf(user.address, 2)).to.equal(0);
+    expect(await lootbox.unitsSupply()).to.equal(0);
+    expect(await lootbox.unitsRequested()).to.equal(0);
+    expect(await lootbox.getAvailableSupply()).to.equal(0);
+  });
+  it('should claim for another opener allocated ERC721 rewards', async function () {
+    const { lootbox, erc721, link, vrfWrapper, vrfCoordinator } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await lootbox.mintBatch(user.address, [1, 2], [4, 3], '0x');
+    await lootbox.addTokens([erc721.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 0);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 5);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 10);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 19);
+    await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+    let price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 3);
+    await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1, 2], [1, 1], {value: price});
+    let requestId = await lootbox.openerRequests(user.address);
+    await vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [7]);
+    price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 1);
+    await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [1], {value: price});
+    requestId = await lootbox.openerRequests(user.address);
+    await vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [9]);
+    const tx = lootbox.connect(user).claimRewards(user.address);
+    await expectContractEvents(tx, lootbox, [
+      ['RewardsClaimed', user.address, erc721.address, 5, 1],
+      ['RewardsClaimed', user.address, erc721.address, 19, 1],
+      ['RewardsClaimed', user.address, erc721.address, 10, 1],
+      ['RewardsClaimed', user.address, erc721.address, 0, 1],
+    ]);
+    await expectInventory(lootbox, [], []);
+    expect(await erc721.ownerOf(0)).to.equal(user.address);
+    expect(await erc721.ownerOf(5)).to.equal(user.address);
+    expect(await erc721.ownerOf(10)).to.equal(user.address);
+    expect(await erc721.ownerOf(19)).to.equal(user.address);
+    expect(await lootbox.balanceOf(user.address, 1)).to.equal(2);
+    expect(await lootbox.balanceOf(user.address, 2)).to.equal(2);
+    expect(await lootbox.unitsSupply()).to.equal(0);
+    expect(await lootbox.unitsRequested()).to.equal(0);
+    expect(await lootbox.getAvailableSupply()).to.equal(0);
+  });
+  it('should claim for another opener allocated ERC1155 NFT rewards', async function () {
+    const { lootbox, erc1155NFT, link, vrfWrapper, vrfCoordinator } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await lootbox.mintBatch(user.address, [1, 2], [4, 3], '0x');
+    await lootbox.addTokens([erc1155NFT.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155NFT.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [0, 5, 10, 13], [1, 1, 1, 1], '0x');
+    await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+    let price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 3);
+    await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1, 2], [1, 1], {value: price});
+    let requestId = await lootbox.openerRequests(user.address);
+    await vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [7]);
+    price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 1);
+    await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [1], {value: price});
+    requestId = await lootbox.openerRequests(user.address);
+    await vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [9]);
+    const tx = lootbox.connect(user).claimRewards(user.address);
+    await expectContractEvents(tx, lootbox, [
+      ['RewardsClaimed', user.address, erc1155NFT.address, 5, 1],
+      ['RewardsClaimed', user.address, erc1155NFT.address, 13, 1],
+      ['RewardsClaimed', user.address, erc1155NFT.address, 10, 1],
+      ['RewardsClaimed', user.address, erc1155NFT.address, 0, 1],
+    ]);
+    expect(await erc1155NFT.balanceOf(user.address, 0)).to.equal(1);
+    expect(await erc1155NFT.balanceOf(user.address, 5)).to.equal(1);
+    expect(await erc1155NFT.balanceOf(user.address, 10)).to.equal(1);
+    expect(await erc1155NFT.balanceOf(user.address, 13)).to.equal(1);
+    await expectInventory(lootbox, [], []);
+    expect(await lootbox.balanceOf(user.address, 1)).to.equal(2);
+    expect(await lootbox.balanceOf(user.address, 2)).to.equal(2);
+    expect(await lootbox.unitsSupply()).to.equal(0);
+    expect(await lootbox.unitsRequested()).to.equal(0);
+    expect(await lootbox.getAvailableSupply()).to.equal(0);
+  });
+  it('should claim for another opener allocated ERC1155 rewards', async function () {
+    const { lootbox, erc1155, link, vrfWrapper, vrfCoordinator } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await lootbox.mintBatch(user.address, [1, 2], [4, 3], '0x');
+    await lootbox.addTokens([erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [0, 5, 8, 9], [10, 40, 30, 40], '0x');
+    await lootbox.setAmountsPerUnit(
+      [erc1155.address, erc1155.address, erc1155.address, erc1155.address],
+      [0, 5, 8, 9], [10, 20, 15, 8]);
+    await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+    let price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 3);
+    await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1, 2], [2, 3], {value: price});
+    let requestId = await lootbox.openerRequests(user.address);
+    await vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [7]);
+    price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 1);
+    await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [2], {value: price});
+    requestId = await lootbox.openerRequests(user.address);
+    await vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [9]);
+    const tx = lootbox.connect(user).claimRewards(user.address);
+    await expectContractEvents(tx, lootbox, [
+      ['RewardsClaimed', user.address, erc1155.address, 0, 10],
+      ['RewardsClaimed', user.address, erc1155.address, 9, 40],
+      ['RewardsClaimed', user.address, erc1155.address, 8, 30],
+      ['RewardsClaimed', user.address, erc1155.address, 5, 40],
+    ]);
+    expect(await erc1155.balanceOf(user.address, 0)).to.equal(10);
+    expect(await erc1155.balanceOf(user.address, 5)).to.equal(40);
+    expect(await erc1155.balanceOf(user.address, 8)).to.equal(30);
+    expect(await erc1155.balanceOf(user.address, 9)).to.equal(40);
+    await expectInventory(lootbox, [], []);
+    expect(await lootbox.balanceOf(user.address, 1)).to.equal(0);
+    expect(await lootbox.balanceOf(user.address, 2)).to.equal(0);
+    expect(await lootbox.unitsSupply()).to.equal(0);
+    expect(await lootbox.unitsRequested()).to.equal(0);
+    expect(await lootbox.getAvailableSupply()).to.equal(0);
+  });
 
-  it.skip('should restrict calling allocate rewards for not the contract itself', async function () {});
-  it.skip('should restrict calling raw fulfill random words for not the VRF_V2_WRAPPER', async function () {});
-  it.skip('should restrict rewards allocation for a failed request', async function () {});
-  it.skip('should restrict rewards allocation for an absent request', async function () {});
-  it.skip('should restrict rewards allocation for a fulfilled request', async function () {});
+  it('should restrict calling allocate rewards for not the contract itself', async function () {
+    const { lootbox, erc20, erc721, erc1155NFT, erc1155, link,
+      vrfWrapper, vrfCoordinator, vrfWrapperSigner } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+    await lootbox.mintBatch(user.address, [1, 2], [4, 3], '0x');
+    await lootbox.addTokens([erc20.address, erc721.address, erc1155NFT.address, erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc20.connect(supplier).transfer(lootbox.address, 100);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 0);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 1);
+    await erc1155NFT.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [2, 3], [1, 1], '0x');
+    await erc1155.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [4, 5], [30, 50], '0x');
+    await lootbox.setAmountsPerUnit(
+      [erc20.address, erc721.address, erc1155NFT.address, erc1155.address, erc1155.address],
+      [0, 0, 0, 4, 5], [25, 2, 2, 15, 25]
+    );
+    const notEnoughGas = 100000;
+    let price = await lootbox.calculateOpenPrice(notEnoughGas, network.config.gasPrice, 10);
+    await lootbox.connect(user).open(notEnoughGas, [1, 2], [4, 3], {value: price});
+    let requestId = await lootbox.openerRequests(user.address);
+    await expect(lootbox._allocateRewards(requestId, 7))
+      .to.be.revertedWithCustomError(lootbox, 'OnlyThis');
+  });
+  it('should restrict calling raw fulfill random words for not the VRF_V2_WRAPPER', async function () {
+    const { lootbox, erc20, erc721, erc1155NFT, erc1155, link,
+      vrfWrapper, vrfCoordinator, vrfWrapperSigner } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+    await lootbox.mintBatch(user.address, [1, 2], [4, 3], '0x');
+    await lootbox.addTokens([erc20.address, erc721.address, erc1155NFT.address, erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc20.connect(supplier).transfer(lootbox.address, 100);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 0);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 1);
+    await erc1155NFT.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [2, 3], [1, 1], '0x');
+    await erc1155.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [4, 5], [30, 50], '0x');
+    await lootbox.setAmountsPerUnit(
+      [erc20.address, erc721.address, erc1155NFT.address, erc1155.address, erc1155.address],
+      [0, 0, 0, 4, 5], [25, 2, 2, 15, 25]
+    );
+    const notEnoughGas = 100000;
+    let price = await lootbox.calculateOpenPrice(notEnoughGas, network.config.gasPrice, 10);
+    await lootbox.connect(user).open(notEnoughGas, [1, 2], [4, 3], {value: price});
+    let requestId = await lootbox.openerRequests(user.address);
+    await expect(lootbox.rawFulfillRandomWords(requestId, [7]))
+      .to.be.revertedWith(/fulfill/);
+  });
+  it('should restrict rewards allocation for a failed request', async function () {
+    const { lootbox, erc20, erc721, erc1155NFT, erc1155, link,
+      vrfWrapper, vrfCoordinator, vrfWrapperSigner } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+    await lootbox.mintBatch(user.address, [1, 2], [4, 3], '0x');
+    await lootbox.addTokens([erc20.address, erc721.address, erc1155NFT.address, erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc20.connect(supplier).transfer(lootbox.address, 100);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 0);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 1);
+    await erc1155NFT.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [2, 3], [1, 1], '0x');
+    await erc1155.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [4, 5], [30, 50], '0x');
+    await lootbox.setAmountsPerUnit(
+      [erc20.address, erc721.address, erc1155NFT.address, erc1155.address, erc1155.address],
+      [0, 0, 0, 4, 5], [25, 2, 2, 15, 25]
+    );
+    const notEnoughGas = 100000;
+    let price = await lootbox.calculateOpenPrice(notEnoughGas, network.config.gasPrice, 10);
+    await lootbox.connect(user).open(notEnoughGas, [1, 2], [4, 3], {value: price});
+    let requestId = await lootbox.openerRequests(user.address);
+    await expect(vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [7]))
+      .to.emit(lootbox, 'OpenRequestFailed')
+      .withArgs(requestId, '0x');
+    await expect(lootbox.connect(vrfWrapperSigner).rawFulfillRandomWords(requestId, [7]))
+      .to.emit(lootbox, 'OpenRequestFailed')
+      .withArgs(requestId, lootbox.interface.encodeErrorResult('InvalidRequestAllocation', [requestId]));
+  });
+  it('should restrict rewards allocation for an absent request', async function () {
+    const { lootbox, erc20, erc721, erc1155NFT, erc1155, link,
+      vrfWrapper, vrfCoordinator, vrfWrapperSigner } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+    await lootbox.mintBatch(user.address, [1, 2], [4, 3], '0x');
+    await lootbox.addTokens([erc20.address, erc721.address, erc1155NFT.address, erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc20.connect(supplier).transfer(lootbox.address, 100);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 0);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 1);
+    await erc1155NFT.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [2, 3], [1, 1], '0x');
+    await erc1155.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [4, 5], [30, 50], '0x');
+    await lootbox.setAmountsPerUnit(
+      [erc20.address, erc721.address, erc1155NFT.address, erc1155.address, erc1155.address],
+      [0, 0, 0, 4, 5], [25, 2, 2, 15, 25]
+    );
+    let requestId = 10;
+    await expect(lootbox.connect(vrfWrapperSigner).rawFulfillRandomWords(requestId, [7]))
+      .to.emit(lootbox, 'OpenRequestFailed')
+      .withArgs(requestId, lootbox.interface.encodeErrorResult('InvalidRequestAllocation', [requestId]));
+  });
+  it('should restrict rewards allocation for a fulfilled request', async function () {
+    const { lootbox, erc20, erc721, erc1155NFT, erc1155, link,
+      vrfWrapper, vrfCoordinator, vrfWrapperSigner } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+    await lootbox.mintBatch(user.address, [1, 2], [4, 3], '0x');
+    await lootbox.addTokens([erc20.address, erc721.address, erc1155NFT.address, erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc20.connect(supplier).transfer(lootbox.address, 100);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 0);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 1);
+    await erc1155NFT.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [2, 3], [1, 1], '0x');
+    await erc1155.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [4, 5], [30, 50], '0x');
+    await lootbox.setAmountsPerUnit(
+      [erc20.address, erc721.address, erc1155NFT.address, erc1155.address, erc1155.address],
+      [0, 0, 0, 4, 5], [25, 2, 2, 15, 25]
+    );
+    let price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 3);
+    await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1, 2], [1, 2], {value: price});
+    let requestId = await lootbox.openerRequests(user.address);
+    await expect(vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [7]))
+      .to.emit(lootbox, 'OpenRequestFulfilled');
+    await expect(lootbox.connect(vrfWrapperSigner).rawFulfillRandomWords(requestId, [7]))
+      .to.emit(lootbox, 'OpenRequestFailed')
+      .withArgs(requestId, lootbox.interface.encodeErrorResult('InvalidRequestAllocation', [requestId]));
+  });
 
   describe.skip('LINK payment', function() {
     it.skip('should allow LINK as ERC677 transfer and call to create an open request', async function () {});
