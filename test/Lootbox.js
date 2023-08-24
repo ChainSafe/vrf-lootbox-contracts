@@ -96,7 +96,12 @@ describe('Lootbox', function () {
   };
 
   const bnToNumber = (list) => {
-    return list.map(el => (el && el._isBigNumber && el.lt(Number.MAX_SAFE_INTEGER.toString())) ? el.toNumber() : el);
+    return list.map(el => {
+      if (Array.isArray(el)) {
+        return bnToNumber(el);
+      }
+      return el && el._isBigNumber && el.lt(Number.MAX_SAFE_INTEGER.toString()) ? el.toNumber() : el;
+    });
   };
 
   const expectContractEvents = async (tx, contract, expectedEvents) => {
@@ -2108,11 +2113,121 @@ describe('Lootbox', function () {
     expect(await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 10)).to.equal(expectedVRFPrice.add('10000'));
   });
 
-  it.skip('should recover lootboxes from an own failed open request', async function () {});
-  it.skip('should recover lootboxes from another opener failed request', async function () {});
-  it.skip('should not recover lootboxes if there is no request for an opener', async function () {});
-  it.skip('should not recover lootboxes if the request is not failed for an opener', async function () {});
-  it.skip('should not recover lootboxes after a successful recovery', async function () {});
+  it('should recover lootboxes from an own failed open request', async function () {
+    const { lootbox, erc20, link,
+      vrfWrapper, vrfCoordinator, vrfWrapperSigner } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+    await lootbox.mintBatch(user.address, [1, 2], [20, 40], '0x');
+    await lootbox.addTokens([erc20.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc20.connect(supplier).transfer(lootbox.address, 100);
+    await lootbox.setAmountsPerUnit([erc20.address], [0], [2]);
+    const notEnoughGas = 100000;
+    const price = await lootbox.calculateOpenPrice(notEnoughGas, network.config.gasPrice, 10);
+    await lootbox.connect(user).open(notEnoughGas, [1, 2], [10, 15], {value: price});
+    const requestId = await lootbox.openerRequests(user.address);
+    await expect(vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [7]))
+      .to.emit(lootbox, 'OpenRequestFailed')
+      .withArgs(requestId, '0x');
+    const tx = lootbox.connect(user).recoverBoxes(user.address);
+    await expectContractEvents(tx, lootbox, [
+      ['TransferBatch', user.address, ZERO_ADDRESS, user.address, [1, 2], [10, 15]],
+      ['BoxesRecovered', user.address, requestId],
+    ]);
+    expect(await lootbox.balanceOf(user.address, 1)).to.equal(20);
+    expect(await lootbox.balanceOf(user.address, 2)).to.equal(40);
+    expect(await lootbox.unitsSupply()).to.equal(50);
+    expect(await lootbox.unitsRequested()).to.equal(0);
+    expect(await lootbox.getAvailableSupply()).to.equal(50);
+  });
+  it('should recover lootboxes from another opener failed request', async function () {
+    const { lootbox, erc20, link,
+      vrfWrapper, vrfCoordinator, vrfWrapperSigner } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+    await lootbox.mintBatch(user.address, [1, 2], [20, 40], '0x');
+    await lootbox.addTokens([erc20.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc20.connect(supplier).transfer(lootbox.address, 100);
+    await lootbox.setAmountsPerUnit([erc20.address], [0], [2]);
+    const notEnoughGas = 100000;
+    const price = await lootbox.calculateOpenPrice(notEnoughGas, network.config.gasPrice, 10);
+    await lootbox.connect(user).open(notEnoughGas, [1, 2], [10, 15], {value: price});
+    const requestId = await lootbox.openerRequests(user.address);
+    await expect(vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [7]))
+      .to.emit(lootbox, 'OpenRequestFailed')
+      .withArgs(requestId, '0x');
+    const tx = lootbox.connect(supplier).recoverBoxes(user.address);
+    await expectContractEvents(tx, lootbox, [
+      ['TransferBatch', supplier.address, ZERO_ADDRESS, user.address, [1, 2], [10, 15]],
+      ['BoxesRecovered', user.address, requestId],
+    ]);
+    expect(await lootbox.balanceOf(user.address, 1)).to.equal(20);
+    expect(await lootbox.balanceOf(user.address, 2)).to.equal(40);
+    expect(await lootbox.unitsSupply()).to.equal(50);
+    expect(await lootbox.unitsRequested()).to.equal(0);
+    expect(await lootbox.getAvailableSupply()).to.equal(50);
+  });
+  it('should not recover lootboxes if there is no request for an opener', async function () {
+    const { lootbox, erc20, link,
+      vrfWrapper, vrfCoordinator, vrfWrapperSigner } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+    await lootbox.mintBatch(user.address, [1, 2], [20, 40], '0x');
+    await lootbox.addTokens([erc20.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc20.connect(supplier).transfer(lootbox.address, 100);
+    await lootbox.setAmountsPerUnit([erc20.address], [0], [2]);
+    const notEnoughGas = 100000;
+    const price = await lootbox.calculateOpenPrice(notEnoughGas, network.config.gasPrice, 10);
+    await lootbox.connect(user).open(notEnoughGas, [1, 2], [10, 15], {value: price});
+    const requestId = await lootbox.openerRequests(user.address);
+    await expect(vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [7]))
+      .to.emit(lootbox, 'OpenRequestFailed')
+      .withArgs(requestId, '0x');
+    const tx = lootbox.connect(user).recoverBoxes(supplier.address);
+    await expect(tx).to.be.revertedWithCustomError(lootbox, 'NothingToRecover');
+  });
+  it('should not recover lootboxes if the request is not failed for an opener', async function () {
+    const { lootbox, erc20, link,
+      vrfWrapper, vrfCoordinator, vrfWrapperSigner } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+    await lootbox.mintBatch(user.address, [1, 2], [20, 40], '0x');
+    await lootbox.addTokens([erc20.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc20.connect(supplier).transfer(lootbox.address, 100);
+    await lootbox.setAmountsPerUnit([erc20.address], [0], [2]);
+    const notEnoughGas = 100000;
+    const price = await lootbox.calculateOpenPrice(notEnoughGas, network.config.gasPrice, 10);
+    await lootbox.connect(user).open(notEnoughGas, [1, 2], [10, 15], {value: price});
+    const requestId = await lootbox.openerRequests(user.address);
+    const tx = lootbox.connect(user).recoverBoxes(user.address);
+    await expect(tx).to.be.revertedWithCustomError(lootbox, 'PendingOpenRequest')
+      .withArgs(requestId);
+  });
+  it('should not recover lootboxes after a successful recovery', async function () {
+    const { lootbox, erc20, link,
+      vrfWrapper, vrfCoordinator, vrfWrapperSigner } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+    await lootbox.mintBatch(user.address, [1, 2], [20, 40], '0x');
+    await lootbox.addTokens([erc20.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc20.connect(supplier).transfer(lootbox.address, 100);
+    await lootbox.setAmountsPerUnit([erc20.address], [0], [2]);
+    const notEnoughGas = 100000;
+    const price = await lootbox.calculateOpenPrice(notEnoughGas, network.config.gasPrice, 10);
+    await lootbox.connect(user).open(notEnoughGas, [1, 2], [10, 15], {value: price});
+    const requestId = await lootbox.openerRequests(user.address);
+    await expect(vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [7]))
+      .to.emit(lootbox, 'OpenRequestFailed')
+      .withArgs(requestId, '0x');
+    await lootbox.connect(supplier).recoverBoxes(user.address);
+    const tx = lootbox.connect(supplier).recoverBoxes(user.address);
+    await expect(tx).to.be.revertedWithCustomError(lootbox, 'NothingToRecover');
+  });
 
   it('should claim own allocated rewards', async function () {
     const { lootbox, erc20, erc721, erc1155NFT, erc1155, link, vrfWrapper, vrfCoordinator } = await loadFixture(deployLootbox);
@@ -2778,30 +2893,30 @@ describe('Lootbox', function () {
       .withArgs(requestId, lootbox.interface.encodeErrorResult('InvalidRequestAllocation', [requestId]));
   });
 
-  describe.skip('LINK payment', function() {
-    it.skip('should allow LINK as ERC677 transfer and call to create an open request', async function () {});
-    it.skip('should restrict other tokens as ERC677 transfer and call', async function () {});
-    it.skip('should restrict to create an open request with LINK payment less than VRF price', async function () {});
-    it.skip('should restrict to create an open request with LINK payment less than VRF price plus LINK factory fee', async function () {});
-    it.skip('should forward the open fee in LINK to the factory when creating an open request', async function () {});
-    it.skip('should not forward a zero fee in LINK to the factory when creating an open request', async function () {});
-    it.skip('should return the excess LINK to the opener when creating an open request', async function () {});
+  // describe.skip('LINK payment', function() {
+  //   it.skip('should allow LINK as ERC677 transfer and call to create an open request', async function () {});
+  //   it.skip('should restrict other tokens as ERC677 transfer and call', async function () {});
+  //   it.skip('should restrict to create an open request with LINK payment less than VRF price', async function () {});
+  //   it.skip('should restrict to create an open request with LINK payment less than VRF price plus LINK factory fee', async function () {});
+  //   it.skip('should forward the open fee in LINK to the factory when creating an open request', async function () {});
+  //   it.skip('should not forward a zero fee in LINK to the factory when creating an open request', async function () {});
+  //   it.skip('should return the excess LINK to the opener when creating an open request', async function () {});
 
-    it.skip('should restrict more then one pending open request per opener', async function () {});
-    it.skip('should restrict open request with less than 100,000 gas for VRF request', async function () {});
-    it.skip('should restrict open request when paused', async function () {});
-    it.skip('should restrict open with zero total units', async function () {});
-    it.skip('should restrict open with total units less than supply', async function () {});
-    it.skip('should burn boxes specified in open request', async function () {});
+  //   it.skip('should restrict more then one pending open request per opener', async function () {});
+  //   it.skip('should restrict open request with less than 100,000 gas for VRF request', async function () {});
+  //   it.skip('should restrict open request when paused', async function () {});
+  //   it.skip('should restrict open with zero total units', async function () {});
+  //   it.skip('should restrict open with total units less than supply', async function () {});
+  //   it.skip('should burn boxes specified in open request', async function () {});
 
-    it.skip('should allocate ERC20 rewards', async function () {});
-    it.skip('should allocate ERC721 rewards', async function () {});
-    it.skip('should allocate ERC1155 rewards', async function () {});
-    it.skip('should allocate ERC1155 NFT rewards', async function () {});
-    it.skip('should allocate all rewards', async function () {});
-    it.skip('should move remainder of ERC721 rewards to leftovers', async function () {});
-    it.skip('should move remainder of ERC1155 NFT rewards to leftovers', async function () {});
-  });
+  //   it.skip('should allocate ERC20 rewards', async function () {});
+  //   it.skip('should allocate ERC721 rewards', async function () {});
+  //   it.skip('should allocate ERC1155 rewards', async function () {});
+  //   it.skip('should allocate ERC1155 NFT rewards', async function () {});
+  //   it.skip('should allocate all rewards', async function () {});
+  //   it.skip('should move remainder of ERC721 rewards to leftovers', async function () {});
+  //   it.skip('should move remainder of ERC1155 NFT rewards to leftovers', async function () {});
+  // });
 
   describe('Native currency payment', function() {
     it('should allow native currency payment to create an open request', async function () {
@@ -2919,8 +3034,10 @@ describe('Lootbox', function () {
       await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [10]);
       const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 1);
       await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [1], {value: price});
+      const requestId = await lootbox.openerRequests(user.address);
       await expect(lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [1], {value: price}))
-        .to.be.revertedWithCustomError(lootbox, 'PendingOpenRequest');
+        .to.be.revertedWithCustomError(lootbox, 'PendingOpenRequest')
+        .withArgs(requestId);
     });
     it('should restrict open request with less than 100,000 gas for VRF request', async function () {
       const { lootbox, erc20, link } = await loadFixture(deployLootbox);

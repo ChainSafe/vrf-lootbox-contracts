@@ -141,6 +141,11 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   /// @param amount The amount of allocated tokens
   event Allocated(address opener, address token, uint tokenId, uint amount);
 
+  /// @notice Emitted when the lootboxes gets recovered from a failed open request
+  /// @param opener The address of the user that received the allocation
+  /// @param requestId The ID of the VRF request
+  event BoxesRecovered(address opener, uint requestId);
+
   /*//////////////////////////////////////////////////////////////
                                 ERRORS
   //////////////////////////////////////////////////////////////*/
@@ -170,7 +175,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   error InsufficientSupply(uint256 supply, uint256 requested);
 
   /// @notice Has to finish the open request first
-  error PendingOpenRequest();
+  error PendingOpenRequest(uint256 requestId);
 
   /// @notice Has to open some lootboxes first
   error NothingToClaim();
@@ -436,12 +441,13 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   function recoverBoxes(address _opener) external {
     uint requestId = openerRequests[_opener];
     if (requestId == 0) revert NothingToRecover();
-    if (requests[requestId].unitsToGet > 0) revert PendingOpenRequest();
+    if (requests[requestId].unitsToGet > 0) revert PendingOpenRequest(requestId);
     uint[] memory ids = requests[requestId].lootIds;
     uint[] memory amounts = requests[requestId].lootAmounts;
     delete requests[requestId];
     delete openerRequests[_opener];
     _mintBatch(_opener, ids, amounts, '');
+    emit BoxesRecovered(_opener, requestId);
   }
 
   /*//////////////////////////////////////////////////////////////
@@ -663,6 +669,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     try this._allocateRewards{gas: gasleft() - 20000}(requestId, randomWords[0]) {
       emit OpenRequestFulfilled(requestId, randomWords[0]);
     } catch (bytes memory reason) {
+      unitsRequested = unitsRequested - requests[requestId].unitsToGet;
       requests[requestId].unitsToGet = 0;
       emit OpenRequestFailed(requestId, reason);
     }
@@ -817,7 +824,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     uint[] memory _lootIds,
     uint[] memory _lootAmounts
   ) internal returns (uint) {
-    if (openerRequests[_opener] != 0) revert PendingOpenRequest();
+    if (openerRequests[_opener] != 0) revert PendingOpenRequest(openerRequests[_opener]);
     if (_gas < 100000) revert InsufficientGas();
     _burnBatch(_opener, _lootIds, _lootAmounts);
     uint unitsToGet = 0;
