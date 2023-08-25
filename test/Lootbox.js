@@ -9,6 +9,7 @@ const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const LINK_UNIT = '1000000000000000000';
 const NOT_USED = 0;
 const RewardType = {
+  UNSET: 0,
   ERC20: 1,
   ERC721: 2,
   ERC1155: 3,
@@ -294,45 +295,451 @@ describe('Lootbox', function () {
 
   it('should allow admin to withdraw native currency', async function () {
     const { lootbox } = await loadFixture(deployLootbox);
-    const [owner] = await ethers.getSigners();
+    const [owner, other] = await ethers.getSigners();
     await setBalance(lootbox.address, 100);
-    await expect(lootbox.withdraw())
+    await expect(lootbox.withdraw(ZERO_ADDRESS, owner.address, 100))
+      .to.emit(lootbox, 'Withdraw')
+      .withArgs(ZERO_ADDRESS, owner.address, 100)
       .to.changeEtherBalance(owner.address, 100)
       .to.changeEtherBalance(lootbox.address, -100);
+    await setBalance(lootbox.address, 100);
+    await expect(lootbox.withdraw(ZERO_ADDRESS, ZERO_ADDRESS, 100))
+      .to.emit(lootbox, 'Withdraw')
+      .withArgs(ZERO_ADDRESS, owner.address, 100)
+      .to.changeEtherBalance(owner.address, 100)
+      .to.changeEtherBalance(lootbox.address, -100);
+    await setBalance(lootbox.address, 100);
+    await expect(lootbox.withdraw(ZERO_ADDRESS, owner.address, 0))
+      .to.emit(lootbox, 'Withdraw')
+      .withArgs(ZERO_ADDRESS, owner.address, 100)
+      .to.changeEtherBalance(owner.address, 100)
+      .to.changeEtherBalance(lootbox.address, -100);
+    await setBalance(lootbox.address, 100);
+    await expect(lootbox.withdraw(ZERO_ADDRESS, other.address, 30))
+      .to.emit(lootbox, 'Withdraw')
+      .withArgs(ZERO_ADDRESS, other.address, 30)
+      .to.changeEtherBalance(owner.address, 0)
+      .to.changeEtherBalance(other.address, 30)
+      .to.changeEtherBalance(lootbox.address, -30);
+  });
+  it('should allow admin to withdraw ERC20', async function () {
+    const { lootbox, erc20 } = await loadFixture(deployLootbox);
+    const [owner, supplier, other] = await ethers.getSigners();
+    await setBalance(lootbox.address, 100);
+    await erc20.connect(supplier).transfer(lootbox.address, 100);
+    await expect(lootbox.withdraw(erc20.address, owner.address, 100))
+      .to.emit(lootbox, 'Withdraw')
+      .withArgs(erc20.address, owner.address, 100)
+      .to.changeEtherBalance(owner.address, 0)
+      .to.changeEtherBalance(lootbox.address, 0)
+      .to.changeTokenBalance(erc20, owner.address, 100)
+      .to.changeTokenBalance(erc20, lootbox.address, -100);
+    await erc20.connect(supplier).transfer(lootbox.address, 100);
+    await expect(lootbox.withdraw(erc20.address, ZERO_ADDRESS, 100))
+      .to.emit(lootbox, 'Withdraw')
+      .withArgs(erc20.address, owner.address, 100)
+      .to.changeTokenBalance(erc20, owner.address, 100)
+      .to.changeTokenBalance(erc20, lootbox.address, -100);
+    await erc20.connect(supplier).transfer(lootbox.address, 100);
+    await expect(lootbox.withdraw(erc20.address, owner.address, 0))
+      .to.emit(lootbox, 'Withdraw')
+      .withArgs(erc20.address, owner.address, 100)
+      .to.changeTokenBalance(erc20, owner.address, 100)
+      .to.changeTokenBalance(erc20, lootbox.address, -100);
+    await erc20.connect(supplier).transfer(lootbox.address, 100);
+    await expect(lootbox.withdraw(erc20.address, other.address, 30))
+      .to.emit(lootbox, 'Withdraw')
+      .withArgs(erc20.address, other.address, 30)
+      .to.changeTokenBalance(erc20, owner.address, 0)
+      .to.changeTokenBalance(erc20, other.address, 30)
+      .to.changeTokenBalance(erc20, lootbox.address, -30);
+  });
+  it('should restrict admin to withdraw allowed ERC20', async function () {
+    const { lootbox, erc20 } = await loadFixture(deployLootbox);
+    const [owner, supplier, other] = await ethers.getSigners();
+    await setBalance(lootbox.address, 100);
+    await erc20.connect(supplier).transfer(lootbox.address, 100);
+    await lootbox.addTokens([erc20.address]);
+    await expect(lootbox.withdraw(erc20.address, owner.address, 100))
+      .to.revertedWithCustomError(lootbox, 'RewardWithdrawalDenied')
+      .withArgs(erc20.address);
+    await expect(lootbox.withdraw(erc20.address, ZERO_ADDRESS, 100))
+      .to.revertedWithCustomError(lootbox, 'RewardWithdrawalDenied')
+      .withArgs(erc20.address);
+    await expect(lootbox.withdraw(erc20.address, owner.address, 0))
+      .to.revertedWithCustomError(lootbox, 'RewardWithdrawalDenied')
+      .withArgs(erc20.address);
+    await expect(lootbox.withdraw(erc20.address, other.address, 30))
+      .to.revertedWithCustomError(lootbox, 'RewardWithdrawalDenied')
+      .withArgs(erc20.address);
   });
   it('should restrict others to withdraw native currency', async function () {
     const { lootbox } = await loadFixture(deployLootbox);
-    const [_, other] = await ethers.getSigners();
-    await expect(lootbox.connect(other).withdraw())
-      .to.be.revertedWith(/AccessControl/);
+    const [owner, supplier, other] = await ethers.getSigners();
     await setBalance(lootbox.address, 100);
-    await expect(lootbox.connect(other).withdraw())
+    await expect(lootbox.connect(other).withdraw(ZERO_ADDRESS, owner.address, 100))
+      .to.be.revertedWith(/AccessControl/);
+    await expect(lootbox.connect(supplier).withdraw(ZERO_ADDRESS, other.address, 0))
+      .to.be.revertedWith(/AccessControl/);
+    await expect(lootbox.connect(supplier).withdraw(ZERO_ADDRESS, ZERO_ADDRESS, 0))
+      .to.be.revertedWith(/AccessControl/);
+  });
+  it('should restrict others to withdraw ERC20', async function () {
+    const { lootbox, erc20 } = await loadFixture(deployLootbox);
+    const [owner, supplier, other] = await ethers.getSigners();
+    await erc20.connect(supplier).transfer(lootbox.address, 100);
+    await expect(lootbox.connect(other).withdraw(erc20.address, owner.address, 100))
+      .to.be.revertedWith(/AccessControl/);
+    await expect(lootbox.connect(supplier).withdraw(erc20.address, other.address, 0))
+      .to.be.revertedWith(/AccessControl/);
+    await expect(lootbox.connect(supplier).withdraw(erc20.address, ZERO_ADDRESS, 0))
       .to.be.revertedWith(/AccessControl/);
   });
 
   // it.skip('should allow admin to withdraw allowed ERC20 from inventory', async function () {});
   // it.skip('should allow admin to withdraw allowed ERC20 from leftovers', async function () {});
   // it.skip('should allow admin to withdraw restricted ERC20', async function () {});
-  it.skip('should allow admin to emergency withdraw ERC20', async function () {});
+  it('should allow admin to emergency withdraw ERC20', async function () {
+    const { lootbox, erc20 } = await loadFixture(deployLootbox);
+    const [owner, supplier, other] = await ethers.getSigners();
+    const erc20extra = await deploy('MockERC20', supplier, 100000);
+    const totalAmount = 1000;
+    const amountPerUnit = 11;
+    const expectedUnits = 90;
+    const expectedInventory = [{
+      rewardToken: erc20.address,
+      rewardType: RewardType.ERC20,
+      units: expectedUnits,
+      amountPerUnit: amountPerUnit,
+      balance: 990,
+      extra: [],
+    }];
+    const expectedLeftovers = [];
+    await lootbox.addTokens([erc20.address]);
+    await erc20.connect(supplier).transfer(lootbox.address, totalAmount);
+    await erc20extra.connect(supplier).transfer(lootbox.address, totalAmount);
+    await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [amountPerUnit]);
+    let tx = lootbox.emergencyWithdraw(erc20.address, RewardType.ERC20, supplier.address, [0], [300]);
+    await expectContractEvents(tx, lootbox, [
+      ['EmergencyModeEnabled', owner.address],
+      ['EmergencyWithdrawal', erc20.address, RewardType.ERC20, supplier.address, [0], [300]],
+    ]);
+    await expect(tx)
+      .to.changeTokenBalance(erc20, supplier.address, 300)
+      .to.changeTokenBalance(erc20, lootbox.address, -300);
+    tx = lootbox.emergencyWithdraw(erc20.address, RewardType.ERC20, other.address, [0], [200]);
+    await expectContractEvents(tx, lootbox, [
+      ['EmergencyWithdrawal', erc20.address, RewardType.ERC20, other.address, [0], [200]],
+    ]);
+    await expect(tx)
+      .to.changeTokenBalance(erc20, other.address, 200)
+      .to.changeTokenBalance(erc20, lootbox.address, -200);
+    tx = lootbox.emergencyWithdraw(erc20extra.address, RewardType.ERC20, ZERO_ADDRESS, [0], [100]);
+    await expectContractEvents(tx, lootbox, [
+      ['EmergencyWithdrawal', erc20extra.address, RewardType.ERC20, owner.address, [0], [100]],
+    ]);
+    await expect(tx)
+      .to.changeTokenBalance(erc20extra, owner.address, 100)
+      .to.changeTokenBalance(erc20extra, lootbox.address, -100);
+    await expectInventory(lootbox, expectedInventory, expectedLeftovers);
+    expect(await lootbox.unitsSupply()).to.equal(expectedUnits);
+  });
 
   // it.skip('should allow admin to withdraw allowed ERC721 from inventory', async function () {});
   // it.skip('should allow admin to withdraw allowed ERC721 from leftovers', async function () {});
   // it.skip('should allow admin to withdraw restricted ERC721', async function () {});
-  it.skip('should allow admin to emergency withdraw ERC721', async function () {});
+  it('should allow admin to emergency withdraw ERC721', async function () {
+    const { lootbox, erc721 } = await loadFixture(deployLootbox);
+    const [owner, supplier, other] = await ethers.getSigners();
+    const erc721extra = await deploy('MockERC721', supplier, 20);
+    await lootbox.addTokens([erc721.address, erc721extra.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 0);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 3);
+    await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 2);
+    await erc721extra.connect(supplier).transferFrom(supplier.address, lootbox.address, 1);
+    await erc721extra.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 5);
+    await lootbox.setAmountsPerUnit([erc721extra.address], [NOT_USED], [3]);
+    let tx = lootbox.emergencyWithdraw(erc721.address, RewardType.ERC721, supplier.address, [0], [0]);
+    await expectContractEvents(tx, lootbox, [
+      ['EmergencyModeEnabled', owner.address],
+      ['EmergencyWithdrawal', erc721.address, RewardType.ERC721, supplier.address, [0], [0]],
+    ]);
+    tx = lootbox.emergencyWithdraw(erc721.address, RewardType.ERC721, other.address, [3, 2], [0, 0]);
+    await expectContractEvents(tx, lootbox, [
+      ['EmergencyWithdrawal', erc721.address, RewardType.ERC721, other.address, [3, 2], [0, 0]],
+    ]);
+    tx = lootbox.emergencyWithdraw(erc721extra.address, RewardType.ERC721, ZERO_ADDRESS, [1, 5], [0, 0]);
+    await expectContractEvents(tx, lootbox, [
+      ['EmergencyWithdrawal', erc721extra.address, RewardType.ERC721, owner.address, [1, 5], [0, 0]],
+    ]);
+    expect(await erc721.ownerOf(0)).to.equal(supplier.address);
+    expect(await erc721.ownerOf(2)).to.equal(other.address);
+    expect(await erc721.ownerOf(3)).to.equal(other.address);
+    expect(await erc721extra.ownerOf(1)).to.equal(owner.address);
+    expect(await erc721extra.ownerOf(5)).to.equal(owner.address);
+    await expectInventory(lootbox, [{
+      rewardToken: erc721.address,
+      rewardType: RewardType.ERC721,
+      units: 3,
+      amountPerUnit: 1,
+      balance: NOT_USED,
+      extra: [NFT(0), NFT(3), NFT(2)],
+    }], []);
+    expect(await lootbox.unitsSupply()).to.equal(3);
+  });
 
   // it.skip('should allow admin to withdraw allowed ERC1155 from inventory', async function () {});
   // it.skip('should allow admin to withdraw allowed ERC1155 from leftovers', async function () {});
-  it.skip('should allow admin to emergency withdraw ERC1155', async function () {});
+  it('should allow admin to emergency withdraw ERC1155', async function () {
+    const { lootbox, erc1155 } = await loadFixture(deployLootbox);
+    const [owner, supplier, other] = await ethers.getSigners();
+    const erc1155extra = await deploy('MockERC1155', supplier, 10, 1000);
+    await lootbox.addTokens([erc1155.address, erc1155extra.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 10, '0x');
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 3, 10, '0x');
+    await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 2, 10, '0x');
+    await erc1155extra.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 10, '0x');
+    await erc1155extra.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 5, 10, '0x');
+    await lootbox.setAmountsPerUnit([erc1155.address], [0], [3]);
+    let tx = lootbox.emergencyWithdraw(erc1155.address, RewardType.ERC1155, supplier.address, [0], [10]);
+    await expectContractEvents(tx, lootbox, [
+      ['EmergencyModeEnabled', owner.address],
+      ['EmergencyWithdrawal', erc1155.address, RewardType.ERC1155, supplier.address, [0], [10]],
+    ]);
+    tx = lootbox.emergencyWithdraw(erc1155.address, RewardType.ERC1155, other.address, [3, 2], [10, 10]);
+    await expectContractEvents(tx, lootbox, [
+      ['EmergencyWithdrawal', erc1155.address, RewardType.ERC1155, other.address, [3, 2], [10, 10]],
+    ]);
+    tx = lootbox.emergencyWithdraw(erc1155extra.address, RewardType.ERC1155, ZERO_ADDRESS, [1, 5], [10, 10]);
+    await expectContractEvents(tx, lootbox, [
+      ['EmergencyWithdrawal', erc1155extra.address, RewardType.ERC1155, owner.address, [1, 5], [10, 10]],
+    ]);
+    expect(await erc1155.balanceOf(supplier.address, 0)).to.equal(1000);
+    expect(await erc1155.balanceOf(other.address, 2)).to.equal(10);
+    expect(await erc1155.balanceOf(other.address, 3)).to.equal(10);
+    expect(await erc1155extra.balanceOf(owner.address, 1)).to.equal(10);
+    expect(await erc1155extra.balanceOf(owner.address, 5)).to.equal(10);
+    await expectInventory(lootbox, [{
+      rewardToken: erc1155.address,
+      rewardType: RewardType.ERC1155,
+      units: 3,
+      amountPerUnit: NOT_USED,
+      balance: NOT_USED,
+      extra: [{
+        id: 0,
+        units: 3,
+        amountPerUnit: 3,
+        balance: 9,
+      }],
+    }], []);
+    expect(await lootbox.unitsSupply()).to.equal(3);
+  });
 
   // it.skip('should allow admin to withdraw allowed ERC1155 NFT from inventory', async function () {});
   // it.skip('should allow admin to withdraw allowed ERC1155 NFT from leftovers', async function () {});
-  it.skip('should allow admin to emergency withdraw ERC1155 NFT', async function () {});
+  it('should allow admin to emergency withdraw ERC1155 NFT', async function () {
+    const { lootbox, erc1155NFT } = await loadFixture(deployLootbox);
+    const [owner, supplier, other] = await ethers.getSigners();
+    const erc1155NFTextra = await deploy('MockERC1155NFT', supplier, 20);
+    await lootbox.addTokens([erc1155NFT.address, erc1155NFTextra.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x');
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 3, 1, '0x');
+    await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 2, 1, '0x');
+    await erc1155NFTextra.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 1, '0x');
+    await erc1155NFTextra.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 5, 1, '0x');
+    await lootbox.setAmountsPerUnit([erc1155NFTextra.address], [NOT_USED], [3]);
+    let tx = lootbox.emergencyWithdraw(erc1155NFT.address, RewardType.ERC1155NFT, supplier.address, [0], [1]);
+    await expectContractEvents(tx, lootbox, [
+      ['EmergencyModeEnabled', owner.address],
+      ['EmergencyWithdrawal', erc1155NFT.address, RewardType.ERC1155NFT, supplier.address, [0], [1]],
+    ]);
+    tx = lootbox.emergencyWithdraw(erc1155NFT.address, RewardType.ERC1155NFT, other.address, [3, 2], [1, 1]);
+    await expectContractEvents(tx, lootbox, [
+      ['EmergencyWithdrawal', erc1155NFT.address, RewardType.ERC1155NFT, other.address, [3, 2], [1, 1]],
+    ]);
+    tx = lootbox.emergencyWithdraw(erc1155NFTextra.address, RewardType.ERC1155NFT, ZERO_ADDRESS, [1, 5], [1, 1]);
+    await expectContractEvents(tx, lootbox, [
+      ['EmergencyWithdrawal', erc1155NFTextra.address, RewardType.ERC1155NFT, owner.address, [1, 5], [1, 1]],
+    ]);
+    expect(await erc1155NFT.balanceOf(supplier.address, 0)).to.equal(1);
+    expect(await erc1155NFT.balanceOf(other.address, 2)).to.equal(1);
+    expect(await erc1155NFT.balanceOf(other.address, 3)).to.equal(1);
+    expect(await erc1155NFTextra.balanceOf(owner.address, 1)).to.equal(1);
+    expect(await erc1155NFTextra.balanceOf(owner.address, 5)).to.equal(1);
+    await expectInventory(lootbox, [{
+      rewardToken: erc1155NFT.address,
+      rewardType: RewardType.ERC1155NFT,
+      units: 3,
+      amountPerUnit: 1,
+      balance: NOT_USED,
+      extra: [NFT(0), NFT(3), NFT(2)],
+    }], []);
+    expect(await lootbox.unitsSupply()).to.equal(3);
+  });
+
+  it('should allow admin to emergency withdraw with open requests', async function () {
+    const { lootbox, erc20, link } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    const totalAmount = 1000;
+    const amountPerUnit = 11;
+    const expectedUnits = 90;
+    const expectedInventory = [{
+      rewardToken: erc20.address,
+      rewardType: RewardType.ERC20,
+      units: expectedUnits,
+      amountPerUnit: amountPerUnit,
+      balance: 990,
+      extra: [],
+    }];
+    const expectedLeftovers = [];
+    await lootbox.mintBatch(user.address, [1], [5], '0x');
+    await lootbox.addTokens([erc20.address]);
+    await erc20.connect(supplier).transfer(lootbox.address, totalAmount);
+    await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [amountPerUnit]);
+    await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+    const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 8);
+    await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [2], {value: price});
+    let tx = lootbox.emergencyWithdraw(erc20.address, RewardType.ERC20, supplier.address, [0], [300]);
+    await expectContractEvents(tx, lootbox, [
+      ['EmergencyModeEnabled', owner.address],
+      ['EmergencyWithdrawal', erc20.address, RewardType.ERC20, supplier.address, [0], [300]],
+    ]);
+    await expect(tx)
+      .to.changeTokenBalance(erc20, supplier.address, 300)
+      .to.changeTokenBalance(erc20, lootbox.address, -300);
+    tx = lootbox.emergencyWithdraw(erc20.address, RewardType.ERC20, user.address, [0], [200]);
+    await expectContractEvents(tx, lootbox, [
+      ['EmergencyWithdrawal', erc20.address, RewardType.ERC20, user.address, [0], [200]],
+    ]);
+    await expect(tx)
+      .to.changeTokenBalance(erc20, user.address, 200)
+      .to.changeTokenBalance(erc20, lootbox.address, -200);
+    expect(await lootbox.unitsSupply()).to.equal(expectedUnits);
+    expect(await lootbox.unitsRequested()).to.equal(2);
+    expect(await lootbox.getAvailableSupply()).to.equal(0);
+  });
+  it('should allow admin to emergency withdraw with allocated rewards', async function () {
+    const { lootbox, erc20, vrfCoordinator, link, vrfWrapper } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    const totalAmount = 1000;
+    const amountPerUnit = 11;
+    const expectedUnits = 88;
+    const expectedInventory = [{
+      rewardToken: erc20.address,
+      rewardType: RewardType.ERC20,
+      units: expectedUnits,
+      amountPerUnit: amountPerUnit,
+      balance: 968,
+      extra: [],
+    }];
+    const expectedLeftovers = [];
+    await lootbox.mintBatch(user.address, [1], [5], '0x');
+    await lootbox.addTokens([erc20.address]);
+    await erc20.connect(supplier).transfer(lootbox.address, totalAmount);
+    await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [amountPerUnit]);
+    await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+    const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 8);
+    await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [2], {value: price});
+    const requestId = await lootbox.openerRequests(user.address);
+    await vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [7]);
+    let tx = lootbox.emergencyWithdraw(erc20.address, RewardType.ERC20, supplier.address, [0], [300]);
+    await expectContractEvents(tx, lootbox, [
+      ['EmergencyModeEnabled', owner.address],
+      ['EmergencyWithdrawal', erc20.address, RewardType.ERC20, supplier.address, [0], [300]],
+    ]);
+    await expect(tx)
+      .to.changeTokenBalance(erc20, supplier.address, 300)
+      .to.changeTokenBalance(erc20, lootbox.address, -300);
+    tx = lootbox.emergencyWithdraw(erc20.address, RewardType.ERC20, user.address, [0], [700]);
+    await expectContractEvents(tx, lootbox, [
+      ['EmergencyWithdrawal', erc20.address, RewardType.ERC20, user.address, [0], [700]],
+    ]);
+    await expect(tx)
+      .to.changeTokenBalance(erc20, user.address, 700)
+      .to.changeTokenBalance(erc20, lootbox.address, -700);
+    expect(await lootbox.unitsSupply()).to.equal(88);
+    expect(await lootbox.unitsRequested()).to.equal(0);
+    expect(await lootbox.getAvailableSupply()).to.equal(0);
+  });
 
   // it.skip('should restrict others to withdraw assets', async function () {});
-  it.skip('should restrict others to emergency withdraw assets', async function () {});
+  it('should restrict others to emergency withdraw assets', async function () {
+    const { lootbox, erc20 } = await loadFixture(deployLootbox);
+    const [owner, supplier, other] = await ethers.getSigners();
+    const erc20extra = await deploy('MockERC20', supplier, 100000);
+    const totalAmount = 1000;
+    const amountPerUnit = 11;
+    await lootbox.addTokens([erc20.address]);
+    await erc20.connect(supplier).transfer(lootbox.address, totalAmount);
+    await erc20extra.connect(supplier).transfer(lootbox.address, totalAmount);
+    await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [amountPerUnit]);
+    await expect(lootbox.connect(supplier).emergencyWithdraw(erc20.address, RewardType.ERC20, owner.address, [0], [300]))
+      .to.be.revertedWith(/AccessControl/);
+    await expect(lootbox.connect(other).emergencyWithdraw(erc20extra.address, RewardType.ERC20, other.address, [0], [300]))
+      .to.be.revertedWith(/AccessControl/);
+  });
+  it('should restrict emergency withdraw with different input arrays length', async function () {
+    const { lootbox, erc20 } = await loadFixture(deployLootbox);
+    const [owner, supplier, other] = await ethers.getSigners();
+    const erc20extra = await deploy('MockERC20', supplier, 100000);
+    const totalAmount = 1000;
+    const amountPerUnit = 11;
+    await lootbox.addTokens([erc20.address]);
+    await erc20.connect(supplier).transfer(lootbox.address, totalAmount);
+    await erc20extra.connect(supplier).transfer(lootbox.address, totalAmount);
+    await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [amountPerUnit]);
+    await expect(lootbox.emergencyWithdraw(erc20.address, RewardType.ERC20, owner.address, [], [300]))
+      .to.be.revertedWithCustomError(lootbox, 'InvalidLength');
+    await expect(lootbox.emergencyWithdraw(erc20extra.address, RewardType.ERC20, other.address, [0], []))
+      .to.be.revertedWithCustomError(lootbox, 'InvalidLength');
+  });
+  it('should restrict emergency withdraw invalid token type', async function () {
+    const { lootbox, erc20 } = await loadFixture(deployLootbox);
+    const [owner, supplier, other] = await ethers.getSigners();
+    const erc20extra = await deploy('MockERC20', supplier, 100000);
+    const totalAmount = 1000;
+    const amountPerUnit = 11;
+    await lootbox.addTokens([erc20.address]);
+    await erc20.connect(supplier).transfer(lootbox.address, totalAmount);
+    await erc20extra.connect(supplier).transfer(lootbox.address, totalAmount);
+    await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [amountPerUnit]);
+    await expect(lootbox.emergencyWithdraw(erc20.address, RewardType.UNSET, owner.address, [0], [300]))
+      .to.be.revertedWithCustomError(lootbox, 'UnexpectedRewardType')
+      .withArgs(RewardType.UNSET);
+    await expect(lootbox.emergencyWithdraw(erc20extra.address, RewardType.UNSET, other.address, [0], [300]))
+      .to.be.revertedWithCustomError(lootbox, 'UnexpectedRewardType')
+      .withArgs(RewardType.UNSET);
+  });
+  it('should restrict lootbox functions when emergency mode is on', async function () {
+    const { lootbox, erc20, erc721, erc1155NFT, erc1155, link, vrfWrapper, vrfCoordinator } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await lootbox.mintBatch(user.address, [1, 2], [4, 3], '0x');
+    await lootbox.addTokens([erc20.address, erc721.address, erc1155NFT.address, erc1155.address]);
+    await lootbox.addSuppliers([supplier.address]);
+    await erc20.connect(supplier).transfer(lootbox.address, 100);
+    await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [10]);
+    await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+    const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 2);
+    await lootbox.emergencyWithdraw(erc20.address, RewardType.ERC20, owner.address, [0], [10]);
+    await expect(lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [2], {value: price}))
+      .to.be.revertedWithCustomError(lootbox, 'EndOfService');
+    await expect(erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 0))
+      .to.be.revertedWithCustomError(lootbox, 'EndOfService');
+    await expect(erc1155NFT.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [2, 3], [1, 1], '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await expect(erc1155.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [4, 5], [30, 50], '0x'))
+      .to.be.revertedWith(/ERC1155Receiver/);
+    await expect(lootbox.setAmountsPerUnit(
+      [erc20.address, erc721.address, erc1155NFT.address, erc1155.address, erc1155.address],
+      [0, 0, 0, 4, 5], [25, 2, 2, 15, 25]
+    )).to.be.revertedWithCustomError(lootbox, 'EndOfService');
+  });
 
   it('should take into account requested units when setting amounts per unit', async function () {
-      const { lootbox, erc20, link, vrfPrice1M, factory } = await loadFixture(deployLootbox);
+      const { lootbox, erc20, link } = await loadFixture(deployLootbox);
       const [owner, supplier, user] = await ethers.getSigners();
       await lootbox.mintBatch(user.address, [1, 2], [4, 3], '0x');
       await lootbox.addTokens([erc20.address]);

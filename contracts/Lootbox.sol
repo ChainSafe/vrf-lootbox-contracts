@@ -64,6 +64,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   uint public unitsSupply;
   uint public unitsRequested;
   uint public unitsMinted;
+  bool public isEmergencyMode;
   EnumerableSet.UintSet private lootboxTypes;
   EnumerableSet.AddressSet private suppliers;
   EnumerableSet.AddressSet private allowedTokens; // Tokens allowed for rewards.
@@ -145,6 +146,24 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   /// @param opener The address of the user that received the allocation
   /// @param requestId The ID of the VRF request
   event BoxesRecovered(address opener, uint requestId);
+
+  /// @notice Emitted when the contract stops operation and assets being withdrawn by the admin
+  /// @param caller The address of the admin who initiated the emergency
+  event EmergencyModeEnabled(address caller);
+
+  /// @notice Emitted when an admin withdraws assets in case of emergency
+  /// @param token The token contract address
+  /// @param tokenType The type of asset of token contract
+  /// @param to The address that received the withdrawn assets
+  /// @param ids The internal tokenIds for ERC721 and ERC1155
+  /// @param amounts The amounts of withdrawn tokens/ids
+  event EmergencyWithdrawal(address token, RewardType tokenType, address to, uint[] ids, uint[] amounts);
+
+  /// @notice Emitted when an admin withdraws ERC20 or native currency
+  /// @param token The token contract address or zero for native currency
+  /// @param to The address that received the withdrawn assets
+  /// @param amount The amount withdrawn
+  event Withdraw(address token, address to, uint amount);
 
   /*//////////////////////////////////////////////////////////////
                                 ERRORS
@@ -228,6 +247,15 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   /// @notice The request is either already failed/fulfilled or was never created
   error InvalidRequestAllocation(uint requestId);
 
+  /// @notice Requested operation is not supported in current version
+  error Unsupported();
+
+  /// @notice Token is allowed as reward and cannot be withdrawn
+  error RewardWithdrawalDenied(address token);
+
+  /// @notice Contrat was put into emergency mode and stopped operations
+  error EndOfService();
+
   /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
   //////////////////////////////////////////////////////////////*/
@@ -257,6 +285,11 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
                         INVENTORY FUNCTIONS
   //////////////////////////////////////////////////////////////*/
 
+  modifier notEmergency() {
+    _notEmergency();
+    _;
+  }
+
   function setURI(string memory _baseURI) external onlyRole(DEFAULT_ADMIN_ROLE) {
     _setURI(_baseURI);
   }
@@ -279,7 +312,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     }
   }
 
-  function setAmountsPerUnit(address[] calldata _tokens, uint[] calldata _ids, uint[] calldata _amountsPerUnit) external onlyRole(DEFAULT_ADMIN_ROLE) {
+  function setAmountsPerUnit(address[] calldata _tokens, uint[] calldata _ids, uint[] calldata _amountsPerUnit) external notEmergency() onlyRole(DEFAULT_ADMIN_ROLE) {
     if (_tokens.length != _ids.length || _tokens.length != _amountsPerUnit.length) revert InvalidLength();
     uint currentSupply = unitsSupply;
     for (uint i = 0; i < _tokens.length; ++i) {
@@ -289,14 +322,38 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     unitsSupply = currentSupply;
   }
 
-  // TODO: Add inventory withdraw function.
+  function emergencyWithdraw(address _token, RewardType _type, address _to, uint[] calldata _ids, uint[] calldata _amounts) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    if (_not(isEmergencyMode)) {
+      isEmergencyMode = true;
+      emit EmergencyModeEnabled(_msgSender());
+    }
+    if (_to == address(0)) {
+      _to = _msgSender();
+    }
+    uint length = _ids.length;
+    if (length != _amounts.length) revert InvalidLength();
+    if (_type == RewardType.ERC20) {
+      IERC20(_token).safeTransfer(_to, _amounts[0]);
+    } else if (_type == RewardType.ERC721) {
+      for (uint i = 0; i < length; ++i) {
+        IERC721(_token).safeTransferFrom(address(this), _to, _ids[i]);
+      }
+    } else if (_type == RewardType.ERC1155 || _type == RewardType.ERC1155NFT) {
+      IERC1155(_token).safeBatchTransferFrom(address(this), _to, _ids, _amounts, '');
+    }
+    else {
+      revert UnexpectedRewardType(_type);
+    }
+
+    emit EmergencyWithdrawal(_token, _type, _to, _ids, _amounts);
+  }
 
   function onERC721Received(
     address,
     address from,
     uint256 tokenId,
     bytes memory
-  ) public override returns (bytes4) {
+  ) public override notEmergency() returns (bytes4) {
     address token = msg.sender;
     if (_not(tokenAllowed(token))) revert TokenDenied(token);
     if (_not(supplyAllowed(from))) revert SupplyDenied(from);
@@ -320,7 +377,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     uint256[] memory ids,
     uint256[] memory values,
     bytes memory
-  ) public override returns (bytes4) {
+  ) public override notEmergency() returns (bytes4) {
     address token = msg.sender;
     if (_not(tokenAllowed(token))) revert TokenDenied(token);
     if (_not(supplyAllowed(from))) revert SupplyDenied(from);
@@ -337,7 +394,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
     uint256 id,
     uint256 value,
     bytes memory
-  ) public override returns (bytes4) {
+  ) public override notEmergency() returns (bytes4) {
     address token = msg.sender;
     if (_not(tokenAllowed(token))) revert TokenDenied(token);
     if (_not(supplyAllowed(from))) revert SupplyDenied(from);
@@ -354,30 +411,31 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   /// @param _amount The max amount of LINK to pay
   /// @param _gasAndLoot List of lootboxes to open and a gas limit for allocation
   ///                    ABI encoded as (uint32, uint[], uint[]), gas, ids, amounts.
-  function onTokenTransfer(address _opener, uint _amount, bytes calldata _gasAndLoot) external override {
-    if (msg.sender != address(LINK)) revert AcceptingOnlyLINK();
-    (uint32 gas, uint[] memory lootIds, uint[] memory lootAmounts) =
-      abi.decode(_gasAndLoot, (uint32, uint[], uint[]));
-    uint vrfPrice = VRF_V2_WRAPPER.calculateRequestPrice(gas);
-    if (_amount < vrfPrice) revert InsufficientPayment();
-    _amount -= vrfPrice;
-    uint unitsToGet = _requestOpen(_opener, gas, lootIds, lootAmounts);
-    uint feePerUnit = FACTORY.feePerUnit(address(this));
-    uint feeInLink = feePerUnit * unitsToGet * LINK_UNIT / _getLinkPrice();
-    if (_amount < feeInLink) revert InsufficientFee();
-    if (feeInLink > 0) {
-      LINK.transferAndCall(address(FACTORY), feeInLink, '');
-    }
-    if (_amount > feeInLink) {
-      IERC20(address(LINK)).safeTransfer(_opener, _amount - feeInLink);
-    }
+  function onTokenTransfer(address _opener, uint _amount, bytes calldata _gasAndLoot) external notEmergency() override {
+    revert Unsupported();
+  //   if (msg.sender != address(LINK)) revert AcceptingOnlyLINK();
+  //   (uint32 gas, uint[] memory lootIds, uint[] memory lootAmounts) =
+  //     abi.decode(_gasAndLoot, (uint32, uint[], uint[]));
+  //   uint vrfPrice = VRF_V2_WRAPPER.calculateRequestPrice(gas);
+  //   if (_amount < vrfPrice) revert InsufficientPayment();
+  //   _amount -= vrfPrice;
+  //   uint unitsToGet = _requestOpen(_opener, gas, lootIds, lootAmounts);
+  //   uint feePerUnit = FACTORY.feePerUnit(address(this));
+  //   uint feeInLink = feePerUnit * unitsToGet * LINK_UNIT / _getLinkPrice();
+  //   if (_amount < feeInLink) revert InsufficientFee();
+  //   if (feeInLink > 0) {
+  //     LINK.transferAndCall(address(FACTORY), feeInLink, '');
+  //   }
+  //   if (_amount > feeInLink) {
+  //     IERC20(address(LINK)).safeTransfer(_opener, _amount - feeInLink);
+  //   }
   }
 
   /// @notice Requests a lootbox openning paying with native currency
   /// @param _gas Gas limit for allocation
   /// @param _lootIds Lootbox ids to open
   /// @param _lootAmounts Lootbox amounts to open
-  function open(uint32 _gas, uint[] calldata _lootIds, uint[] calldata _lootAmounts) external payable {
+  function open(uint32 _gas, uint[] calldata _lootIds, uint[] calldata _lootAmounts) external notEmergency() payable {
     uint vrfPrice = VRF_V2_WRAPPER.calculateRequestPrice(_gas);
     uint vrfPriceNative = vrfPrice * _getLinkPrice() / LINK_UNIT;
     if (msg.value < vrfPriceNative) revert InsufficientPayment();
@@ -471,6 +529,9 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   }
 
   function getAvailableSupply() external view returns (uint) {
+    if (isEmergencyMode) {
+      return 0;
+    }
     return unitsSupply - unitsRequested;
   }
 
@@ -529,6 +590,9 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
           result[i].extra[j].balance = result[i].extra[j].units * result[i].extra[j].amountPerUnit;
         }
       }
+    }
+    if (isEmergencyMode) {
+      return (result, leftoversResult);
     }
 
     tokens = allowedTokens.length();
@@ -645,8 +709,17 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   //////////////////////////////////////////////////////////////*/
 
   /// @notice Transfer the contract balance to the owner
-  function withdraw() external onlyRole(DEFAULT_ADMIN_ROLE) {
-    payable(_msgSender()).sendValue(address(this).balance);
+  function withdraw(address _token, address payable _to, uint _amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    if (tokenAllowed(_token)) revert RewardWithdrawalDenied(_token);
+    if (_to == payable(0)) {
+      _to = payable(_msgSender());
+    }
+    emit Withdraw(_token, _to, _amount);
+    if (_token == address(0)) {
+      _to.sendValue(_amount == 0 ? address(this).balance : _amount);
+      return;
+    }
+    IERC20(_token).safeTransfer(_to, _amount == 0 ? IERC20(_token).balanceOf(address(this)) : _amount);
   }
 
   /*//////////////////////////////////////////////////////////////
@@ -692,6 +765,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
   }
 
   function _addToken(address _token) internal {
+    if (_token == address(0)) revert TokenDenied(_token);
     if (allowedTokens.add(_token)) {
       emit TokenAdded(_token);
     }
@@ -975,6 +1049,10 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC67
 
   function _not(bool _value) internal pure returns (bool) {
     return !_value;
+  }
+
+  function _notEmergency() internal view {
+    if (isEmergencyMode) revert EndOfService();
   }
 
   /**
