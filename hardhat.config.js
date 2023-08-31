@@ -1,5 +1,7 @@
 require('@nomicfoundation/hardhat-toolbox');
 require('hardhat-docgen');
+require("@chainsafe/hardhat-ts-artifact-plugin");
+
 const networkConfig = require('./network.config.js');
 const util = require('node:util');
 
