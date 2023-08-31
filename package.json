@@ -2,7 +2,7 @@
   "name": "@chainsafe/vrf-lootbox-contracts",
   "version": "1.0.0",
   "author": "ChainSafe <info@chainsafe.io>",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "homepage": "https://github.com/ChainSafe/vrf-lootbox-contracts#readme",
   "repository": {
 		"type": "git",
