@@ -51,7 +51,7 @@ describe('Lootbox', function () {
 
     await factory.deployLootbox('someUri', 0);
     const deployedLootbox = await factory.getLootbox(owner.address, 0);
-    const lootbox = await ethers.getContractAt('Lootbox', deployedLootbox);
+    const lootbox = await ethers.getContractAt('LootboxInterface', deployedLootbox);
     const ethLinkFeedAddress = await lootbox.LINK_ETH_FEED();
     const ethLinkFeed = await ethers.getContractAt('AggregatorV3Interface', ethLinkFeedAddress);
     const ethLinkPrice = (await ethLinkFeed.latestRoundData())[1];
