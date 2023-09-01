@@ -5,9 +5,12 @@ import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
 import {Address} from '@openzeppelin/contracts/utils/Address.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
+import {Clones} from '@openzeppelin/contracts/proxy/Clones.sol';
 import {ERC677ReceiverInterface} from '@chainlink/contracts/src/v0.8/interfaces/ERC677ReceiverInterface.sol';
+import {IVRFV2Wrapper} from './interfaces/IVRFV2Wrapper.sol';
 import {ILootboxFactory} from './interfaces/ILootboxFactory.sol';
 import {Lootbox} from './Lootbox.sol';
+import {LootboxView} from './LootboxView.sol';
 
 //  $$$$$$\  $$\   $$\  $$$$$$\  $$$$$$\ $$\   $$\  $$$$$$\   $$$$$$\  $$$$$$$$\ $$$$$$$$\ 
 // $$  __$$\ $$ |  $$ |$$  __$$\ \_$$  _|$$$\  $$ |$$  __$$\ $$  __$$\ $$  _____|$$  _____|
@@ -35,6 +38,7 @@ import {Lootbox} from './Lootbox.sol';
 contract LootboxFactory is ILootboxFactory, ERC677ReceiverInterface, Ownable {
   using Address for address payable;
   using SafeERC20 for IERC20;
+  using Clones for address;
 
   /*//////////////////////////////////////////////////////////////
                                 STATE
@@ -42,6 +46,8 @@ contract LootboxFactory is ILootboxFactory, ERC677ReceiverInterface, Ownable {
 
   address public immutable LINK;
   address public immutable VRFV2WRAPPER;
+  address public immutable LOOTBOX;
+  address public immutable VIEW;
 
   uint public feePerDeploy = 0;
   mapping(address lootbox => uint feePerUnit) private fees;
@@ -76,6 +82,9 @@ contract LootboxFactory is ILootboxFactory, ERC677ReceiverInterface, Ownable {
   ) {
     LINK = _link;
     VRFV2WRAPPER = _vrfV2Wrapper;
+    VIEW = address(new LootboxView(_link, VRFV2WRAPPER));
+    address feed = address(IVRFV2Wrapper(_vrfV2Wrapper).LINK_ETH_FEED());
+    LOOTBOX = address(new Lootbox(_link, _vrfV2Wrapper, feed, VIEW));
   }
 
   /*//////////////////////////////////////////////////////////////
@@ -89,7 +98,8 @@ contract LootboxFactory is ILootboxFactory, ERC677ReceiverInterface, Ownable {
   function deployLootbox(string calldata _uri, uint _id) external payable returns (address) {
     if (msg.value < feePerDeploy) revert InsufficientPayment();
     if (lootboxes[_msgSender()][_id] != address(0)) revert AlreadyDeployed();
-    address lootbox = address(new Lootbox{salt: bytes32(_id)}(LINK, VRFV2WRAPPER, _uri, _msgSender()));
+    address lootbox = LOOTBOX.cloneDeterministic(keccak256(abi.encodePacked(_msgSender(), _id)));
+    Lootbox(lootbox).initialize(_uri, _msgSender());
     lootboxes[_msgSender()][_id] = lootbox;
     emit Deployed(lootbox, _msgSender(), msg.value);
     return lootbox;
