@@ -309,6 +309,8 @@ abstract contract LootboxInterface is VRFV2WrapperConsumerBase, ERC721Holder, ER
   /// @param _amount The amount of token to withdraw or zero for full amount.
   function withdraw(address _token, address payable _to, uint _amount) external virtual;
 
+  function mintToMany(address[] calldata _tos, uint[] calldata _lootboxTypes, uint[] calldata _amounts) external virtual;
+
   /// @notice Gets number of units that still could be requested for opening.
   /// @dev Returns 0 during emergency.
   /// @return uint number of units.

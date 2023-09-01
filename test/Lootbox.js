@@ -2493,6 +2493,65 @@ describe('Lootbox', function () {
     await expect(lootbox.mint(user.address, 1000, 1, '0x'))
       .to.be.revertedWithCustomError(lootbox, 'InvalidLootboxType');
   });
+
+  it('should allow minter to mint lootboxes to many receivers', async function () {
+    const { lootbox, MINTER } = await loadFixture(deployLootbox);
+    const [minter, other, user] = await ethers.getSigners();
+    await lootbox.mintToMany([user.address, other.address], [1, 3], [10, 4]);
+    expect(await lootbox.balanceOf(user.address, 1)).to.equal(10);
+    expect(await lootbox.balanceOf(user.address, 3)).to.equal(0);
+    expect(await lootbox.balanceOf(other.address, 1)).to.equal(0);
+    expect(await lootbox.balanceOf(other.address, 3)).to.equal(4);
+    expect(await lootbox.unitsMinted()).to.equal(22);
+    await lootbox.grantRole(MINTER, other.address);
+    await lootbox.connect(other).mintToMany([user.address, other.address], [1, 3], [10, 4]);
+    expect(await lootbox.balanceOf(user.address, 1)).to.equal(20);
+    expect(await lootbox.balanceOf(user.address, 3)).to.equal(0);
+    expect(await lootbox.balanceOf(other.address, 1)).to.equal(0);
+    expect(await lootbox.balanceOf(other.address, 3)).to.equal(8);
+    expect(await lootbox.unitsMinted()).to.equal(44);
+  });
+  it('should restrict others to mint lootboxes to many receivers', async function () {
+    const { lootbox } = await loadFixture(deployLootbox);
+    const [minter, other, user] = await ethers.getSigners();
+    await expect(lootbox.connect(other).mintToMany([user.address, other.address], [1, 3], [10, 4]))
+      .to.be.revertedWith(/role/);
+  });
+  it('should restrict minting of 0 id lootboxes to many receivers', async function () {
+    const { lootbox } = await loadFixture(deployLootbox);
+    const [minter, other, user] = await ethers.getSigners();
+    await expect(lootbox.mintToMany([user.address], [0], [1]))
+      .to.be.revertedWithCustomError(lootbox, 'InvalidLootboxType');
+    await expect(lootbox.mintToMany([user.address], [0], [10]))
+      .to.be.revertedWithCustomError(lootbox, 'InvalidLootboxType');
+  });
+  it('should restrict minting of 256+ id lootboxes to many receivers', async function () {
+    const { lootbox } = await loadFixture(deployLootbox);
+    const [minter, other, user] = await ethers.getSigners();
+    await expect(lootbox.mintToMany([user.address], [256], [1]))
+      .to.be.revertedWithCustomError(lootbox, 'InvalidLootboxType');
+    await expect(lootbox.mintToMany([user.address], [256], [10]))
+      .to.be.revertedWithCustomError(lootbox, 'InvalidLootboxType');
+    await expect(lootbox.mintToMany([user.address], [1000], [1]))
+      .to.be.revertedWithCustomError(lootbox, 'InvalidLootboxType');
+  });
+  it('should restrict to mint lootboxes to many receivers with different input arrays length', async function () {
+    const { lootbox } = await loadFixture(deployLootbox);
+    const [minter, other, user] = await ethers.getSigners();
+    await expect(lootbox.mintToMany([user.address], [1, 2], [10]))
+      .to.be.revertedWithCustomError(lootbox, 'InvalidLength');
+    await expect(lootbox.mintToMany([user.address], [1, 2], [10, 11]))
+      .to.be.revertedWithCustomError(lootbox, 'InvalidLength');
+    await expect(lootbox.mintToMany([user.address], [1], [10, 11]))
+      .to.be.revertedWithCustomError(lootbox, 'InvalidLength');
+    await expect(lootbox.mintToMany([user.address, other.address], [1, 2], [10]))
+      .to.be.revertedWithCustomError(lootbox, 'InvalidLength');
+    await expect(lootbox.mintToMany([user.address, other.address], [1], [10]))
+      .to.be.revertedWithCustomError(lootbox, 'InvalidLength');
+    await expect(lootbox.mintToMany([user.address, other.address], [1], [10, 11]))
+      .to.be.revertedWithCustomError(lootbox, 'InvalidLength');
+  });
+
   it('should support IERC1155Receiver interface', async function () {
     const { lootbox } = await loadFixture(deployLootbox);
     expect(await lootbox.supportsInterface(IERC1155Receiver)).to.be.true;

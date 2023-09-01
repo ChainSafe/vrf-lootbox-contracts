@@ -319,15 +319,20 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
     _;
   }
 
+  modifier onlyAdmin() {
+    _checkRole(DEFAULT_ADMIN_ROLE);
+    _;
+  }
+
   /// @notice Sets the URI for the contract.
   /// @param _baseURI The base URI being used.
-  function setURI(string memory _baseURI) external onlyRole(DEFAULT_ADMIN_ROLE) {
+  function setURI(string memory _baseURI) external onlyAdmin() {
     _setURI(_baseURI);
   }
 
   /// @notice Adds loot suppliers.
   /// @param _suppliers An array of loot suppliers being added.
-  function addSuppliers(address[] calldata _suppliers) external onlyRole(DEFAULT_ADMIN_ROLE) {
+  function addSuppliers(address[] calldata _suppliers) external onlyAdmin() {
     for (uint i = 0; i < _suppliers.length; ++i) {
       _addSupplier(_suppliers[i]);
     }
@@ -335,7 +340,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
 
   /// @notice Removes contract suppliers.
   /// @param _suppliers An array of suppliers being removed.
-  function removeSuppliers(address[] calldata _suppliers) external onlyRole(DEFAULT_ADMIN_ROLE) {
+  function removeSuppliers(address[] calldata _suppliers) external onlyAdmin() {
     for (uint i = 0; i < _suppliers.length; ++i) {
       _removeSupplier(_suppliers[i]);
     }
@@ -343,7 +348,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
 
   /// @notice Adds tokens for lootbox usage.
   /// @param _tokens An array of tokens being added.
-  function addTokens(address[] calldata _tokens) external onlyRole(DEFAULT_ADMIN_ROLE) {
+  function addTokens(address[] calldata _tokens) external onlyAdmin() {
     for (uint i = 0; i < _tokens.length; ++i) {
       _addToken(_tokens[i]);
     }
@@ -354,7 +359,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @param _tokens An array of tokens being added.
   /// @param _ids An array of ids being added.
   /// @param _amountsPerUnit An array of amounts being added.
-  function setAmountsPerUnit(address[] calldata _tokens, uint[] calldata _ids, uint[] calldata _amountsPerUnit) external notEmergency() onlyRole(DEFAULT_ADMIN_ROLE) {
+  function setAmountsPerUnit(address[] calldata _tokens, uint[] calldata _ids, uint[] calldata _amountsPerUnit) external notEmergency() onlyAdmin() {
     if (_tokens.length != _ids.length || _tokens.length != _amountsPerUnit.length) revert InvalidLength();
     uint currentSupply = unitsSupply;
     for (uint i = 0; i < _tokens.length; ++i) {
@@ -364,7 +369,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
     unitsSupply = currentSupply;
   }
 
-  function emergencyWithdraw(address _token, RewardType _type, address _to, uint[] calldata _ids, uint[] calldata _amounts) external onlyRole(DEFAULT_ADMIN_ROLE) {
+  function emergencyWithdraw(address _token, RewardType _type, address _to, uint[] calldata _ids, uint[] calldata _amounts) external onlyAdmin() {
     if (_not(isEmergencyMode)) {
       isEmergencyMode = true;
       emit EmergencyModeEnabled(_msgSender());
@@ -511,9 +516,9 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
           continue;
         }
         info.amount[0] = 0;
-        allocated[token][0] = allocated[token][0] - amount;
+        _deAllocate(token, 0, amount);
         _transferToken(token, rewardType, _opener, 0, amount);
-        emit RewardsClaimed(_opener, token, 0, amount);
+        _emitClaimed(_opener, token, 0, amount);
       }
       else {
         uint tokenIds = info.ids.length();
@@ -525,10 +530,10 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
           if (rewardType == RewardType.ERC1155) {
             amount = info.amount[tokenId];
             info.amount[tokenId] = 0;
-            allocated[token][tokenId] = allocated[token][tokenId] - amount;
+            _deAllocate(token, tokenId, amount);
           }
           _transferToken(token, rewardType, _opener, tokenId, amount);
-          emit RewardsClaimed(_opener, token, tokenId, amount);
+          _emitClaimed(_opener, token, tokenId, amount);
         }
       }
     }
@@ -614,7 +619,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @param _token The token contract address or zero for native currency.
   /// @param _to The receiver address or zero for caller address.
   /// @param _amount The amount of token to withdraw or zero for full amount.
-  function withdraw(address _token, address payable _to, uint _amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+  function withdraw(address _token, address payable _to, uint _amount) external onlyAdmin() {
     if (_tokenAllowed(_token)) revert RewardWithdrawalDenied(_token);
     if (_to == payable(0)) {
       _to = payable(_msgSender());
@@ -625,6 +630,14 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
       return;
     }
     _transferToken(_token, RewardType.ERC20, _to, 0, _amount == 0 ? _tryBalanceOfThis(_token) : _amount);
+  }
+
+  function mintToMany(address[] calldata _tos, uint[] calldata _lootboxTypes, uint[] calldata _amounts) external onlyRole(MINTER_ROLE) {
+    uint len = _tos.length;
+    if (len != _lootboxTypes.length || len != _amounts.length) revert InvalidLength();
+    for (uint i = 0; i < len; ++i) {
+      _mint(_tos[i], _lootboxTypes[i], _amounts[i], '');
+    }
   }
 
   /*//////////////////////////////////////////////////////////////
@@ -866,8 +879,16 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
     allocated[_token][_id] += _amount;
   }
 
+  function _deAllocate(address _token, uint _id, uint _amount) internal {
+    allocated[_token][_id] -= _amount;
+  }
+
   function _emitAllocated(address _to, address _token, uint _id, uint _amount) internal {
     emit Allocated(_to, _token, _id, _amount);
+  }
+
+  function _emitClaimed(address _claimer, address _token, uint _id, uint _amount) internal {
+    emit RewardsClaimed(_claimer, _token, _id, _amount);
   }
 
   /// @notice Picks the rewards using the given randomness as a seed.
