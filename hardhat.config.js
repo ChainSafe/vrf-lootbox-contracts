@@ -1,7 +1,18 @@
 require('@nomicfoundation/hardhat-toolbox');
 require('hardhat-docgen');
+require('dotenv').config();
 const networkConfig = require('./network.config.js');
 const util = require('node:util');
+
+const sleep = (msec) => {
+  return new Promise((resolve) => {
+    setTimeout(() => resolve(true), msec);
+  });
+}
+
+const isSet = (param) => {
+  return param && param.length > 0;
+}
 
 const assert = (condition, message) => {
   if (condition) return;
@@ -25,7 +36,8 @@ async function getContract(contractName, deployer, nonce) {
 }
 
 task('deploy-factory', 'Deploys LootboxFactory')
-.setAction(async () => {
+.addOptionalParam('verify', 'Verify the deployed factory', 'false', types.bool)
+.setAction(async ({ verify }) => {
   const { chainId } = network.config;
   assert(chainId, 'Missing network configuration!');
 
@@ -38,7 +50,24 @@ task('deploy-factory', 'Deploys LootboxFactory')
   await lootboxFactory.deployed();
   console.log(`LootboxFactory deployed by ${deployer.address} to: ${lootboxFactory.address} ${network.name}`);
 
-  // TODO: Add etherscan verification step.
+  if (verify === 'true') {
+    console.log('Waiting half a minute to start verification');
+    await sleep(30000);
+    await hre.run('verify:verify', {
+      address: lootboxFactory.address,
+      constructorArguments: [linkToken, vrfV2Wrapper],
+    });
+    const view = await ethers.getContractAt('LootboxInterface', await lootboxFactory.VIEW());
+    await hre.run('verify:verify', {
+      address: view.address,
+      constructorArguments: [linkToken, vrfV2Wrapper],
+    });
+    const feed = await view.LINK_ETH_FEED();
+    await hre.run('verify:verify', {
+      address: await lootboxFactory.LOOTBOX(),
+      constructorArguments: [linkToken, vrfV2Wrapper, feed, view.address],
+    });
+  }
 });
 
 // All the following tasks are for testing and development purpuses only.
@@ -336,23 +365,23 @@ module.exports = {
     mainnet: {
       url: process.env.MAINNET_URL || 'https://cloudflare-eth.com',
       accounts:
-        process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
+        isSet(process.env.MAINNET_PRIVATE_KEY) ? [process.env.MAINNET_PRIVATE_KEY] : [],
     },
     sepolia: {
       chainId: 11155111,
       url: process.env.SEPOLIA_URL || '',
       accounts:
-        process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
+        isSet(process.env.SEPOLIA_PRIVATE_KEY) ? [process.env.SEPOLIA_PRIVATE_KEY] : [],
     },
     goerli: {
       chainId: 5,
       url: process.env.GOERLI_URL || '',
       accounts:
-        process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
+        isSet(process.env.GOERLI_PRIVATE_KEY) ? [process.env.GOERLI_PRIVATE_KEY] : [],
     },
   },
   gasReporter: {
-    enabled: process.env.REPORT_GAS !== undefined,
+    enabled: isSet(process.env.REPORT_GAS),
     currency: 'USD',
   },
   etherscan: {
