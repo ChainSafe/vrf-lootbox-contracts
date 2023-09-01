@@ -76,7 +76,7 @@ task('deploy-lootbox', 'Deploys an ERC1155 Lootbox through a factory along with 
     .transfer(lootboxAddress, ethers.utils.parseUnits(linkamount.toString()))).wait();
   console.log(`Transferred ${linkamount} LINK to the lootbox contract.`);
 
-  const lootbox = await ethers.getContractAt('Lootbox', lootboxAddress);
+  const lootbox = await ethers.getContractAt('LootboxInterface', lootboxAddress);
   await (await lootbox.addSuppliers([supplier.address])).wait();
   console.log(`Supplier ${supplier.address} added to the lootbox contract.`);
 
@@ -163,7 +163,7 @@ task('set-amountperunit', 'Set amount per unit of reward for a reward token')
 
   const lootboxFactory = await ethers.getContractAt('LootboxFactory', factory);
   const lootboxAddress = await lootboxFactory.getLootbox(deployer.address, id);
-  const lootbox = await ethers.getContractAt('Lootbox', lootboxAddress);
+  const lootbox = await ethers.getContractAt('LootboxInterface', lootboxAddress);
 
   let tokenAddress;
   if (type == 'ERC20') {
@@ -207,7 +207,7 @@ task('mint', 'Mint lootboxes')
 
   const lootboxFactory = await ethers.getContractAt('LootboxFactory', factory);
   const lootboxAddress = await lootboxFactory.getLootbox(deployer.address, id);
-  const lootbox = await ethers.getContractAt('Lootbox', lootboxAddress);
+  const lootbox = await ethers.getContractAt('LootboxInterface', lootboxAddress);
 
   await (await lootbox.connect(deployer)
     .mint(userAddr, tokenid, amount, '0x')).wait();
@@ -238,7 +238,7 @@ task('fulfill', 'Set amount per unit of reward for a reward token')
 
   const lootboxFactory = await ethers.getContractAt('LootboxFactory', factory);
   const lootboxAddress = await lootboxFactory.getLootbox(deployer.address, id);
-  const lootbox = await ethers.getContractAt('Lootbox', lootboxAddress);
+  const lootbox = await ethers.getContractAt('LootboxInterface', lootboxAddress);
   const requestId = await lootbox.openerRequests(userAddr);
   assert(requestId.gt('0'), `Open request not found for user ${userAddr}`);
 
@@ -271,7 +271,7 @@ task('inventory', 'Get inventory')
 
   const lootboxFactory = await ethers.getContractAt('LootboxFactory', factory);
   const lootboxAddress = await lootboxFactory.getLootbox(deployer.address, id);
-  const lootbox = await ethers.getContractAt('Lootbox', lootboxAddress);
+  const lootbox = await ethers.getContractAt('LootboxInterface', lootboxAddress);
 
   const inventory = await lootbox.getInventory();
   console.log(util.inspect(inventory.result, false, null, true));
