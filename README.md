@@ -27,15 +27,15 @@ The keys are:
 
     npm run node
 
+You can perform a full dev setup with a single command, for a more fine grained setup proceed to the second step below instead
+
+    npm run hardhat -- devsetup
+
 #### Second step, deploy a lootbox factory
 
     npm run hardhat -- deploy-factory
 
 ### All the next steps are for development and testing purposes only, and will not work on real networks
-
-#### You can perform a full dev setup with a single command
-
-    npm run hardhat -- devsetup
 
 #### For the more fine grained setup use following commands
 #### Deploy a lootbox and transfer LINK to it. Also deploys a ERC20 with balance 100000, ERC721 with 20 tokens, ERC1155 with 10 tokens with 1000 balance each, and an ERC1155NFT with 15 tokens. All the reward tokens are added to whitelist of the lootbox and the supplier user given supply role
