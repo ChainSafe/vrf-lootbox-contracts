@@ -1,7 +1,8 @@
 # vrf-lootbox-contracts
 
 ### Chainsafe Documentation
-    Each function has detail natspec comments for those that know how to read solidity. If you'd prefer a more user friendly approach you can check out our documentation on what each contract function does aswell as how to use them here https://docs.gaming.chainsafe.io/current/lootboxes
+
+Each function has detail natspec comments for those that know how to read solidity. If you'd prefer a more user friendly approach you can check out our documentation on what each contract function does aswell as how to use them here https://docs.gaming.chainsafe.io/current/lootboxes
 
 ### Install
 
