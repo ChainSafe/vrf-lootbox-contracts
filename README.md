@@ -37,36 +37,35 @@ You can perform a full dev setup with a single command, for a more fine grained 
 
 ### All the next steps are for development and testing purposes only, and will not work on real networks
 
-#### For the more fine grained setup use following commands
-#### Deploy a lootbox and transfer LINK to it. Also deploys a ERC20 with balance 100000, ERC721 with 20 tokens, ERC1155 with 10 tokens with 1000 balance each, and an ERC1155NFT with 15 tokens. All the reward tokens are added to whitelist of the lootbox and the supplier user given supply role
+Deploy a lootbox and transfer LINK to it. Also deploys a ERC20 with balance 100000, ERC721 with 20 tokens, ERC1155 with 10 tokens with 1000 balance each, and an ERC1155NFT with 15 tokens. All the reward tokens are added to whitelist of the lootbox and the supplier user given supply role
 
     npm run hardhat -- deploy-lootbox
 
-#### Deploy additional lootboxes by specifying an optional `id` parameter, and others
+Deploy additional lootboxes by specifying an optional `id` parameter, and others
 
     npm run hardhat -- deploy-lootbox --id 10 --uri "ipfs://somehash" --linkamount 1000
 
-#### Supply rewards, as much as needed
+Supply rewards, as much as needed
 
     npm run hardhat -- supply-rewards --type ERC20 --amount 1000
     npm run hardhat -- supply-rewards --type ERC1155NFT --tokenid 3
     npm run hardhat -- supply-rewards --type ERC1155 --tokenid 4 --amount 150
     npm run hardhat -- supply-rewards --type ERC721 --tokenid 9
 
-#### Set amounts per unit 
+Set amounts per unit 
 
     npm run hardhat -- set-amountperunit --type ERC20 --amountperunit 30
     npm run hardhat -- set-amountperunit --type ERC1155 --tokenid 3 --amountperunit 35
     npm run hardhat -- set-amountperunit --type ERC1155 --tokenid 4 --amountperunit 50
 
-#### Mint lootboxes to the user. TokenId represents how many rewards user will get per lootbox.
+Mint lootboxes to the user. TokenId represents how many rewards user will get per lootbox.
 
     npm run hardhat -- mint
 
-#### After the user submits an open request, fulfill randomness
+After the user submits an open request, fulfill randomness
 
     npm run hardhat -- fulfill
 
-#### You can get help on any command by doing
+You can get help on any command by doing
 
     npm run hardhat help fulfill
