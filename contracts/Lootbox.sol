@@ -279,6 +279,9 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @notice Contrat could only be initialized by the factory
   error OnlyFactory();
 
+  /// @notice View function reverted without reason
+  error ViewCallFailed();
+
   /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
   //////////////////////////////////////////////////////////////*/
@@ -574,40 +577,17 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
     ExtraRewardInfo[] extra;
   }
 
-  fallback() external {
-    _callView();
-  }
-
-  function _callView() internal view {
-    uint sig = uint(uint32(this.viewCall.selector));
-    bytes memory _data = msg.data;
-    uint len = _data.length;
+  fallback(bytes calldata _data) external returns (bytes memory result) {
     bool success;
-    assembly {
-      mstore(_data, sig)
-      success := staticcall(gas(), address(), add(_data, 28), add(len, 4), 0, 0)
+    if (msg.sender == address(this)) {
+      (success, result) = VIEW.delegatecall(_data);
+    } else {
+      (success, result) = address(this).staticcall(_data);
     }
-    _returnReturnData(success);
-  }
-
-  function _returnReturnData(bool _success) internal pure {
-    assembly {
-      let returndatastart := 0
-      returndatacopy(returndatastart, 0, returndatasize())
-      switch _success case 0 { revert(returndatastart, returndatasize()) }
-        default { return(returndatastart, returndatasize()) }
+    if (_not(success)) {
+      _revert(result);
     }
-  }
-
-  function viewCall() external {
-    if (msg.sender != address(this)) revert OnlyThis();
-    bytes memory _data = msg.data[4:];
-    address _view = VIEW;
-    bool success;
-    assembly {
-      success := delegatecall(gas(), _view, add(_data, 32), mload(_data), 0, 0)
-    }
-    _returnReturnData(success);
+    return result;
   }
 
   /*//////////////////////////////////////////////////////////////
@@ -1054,6 +1034,19 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @return bool Opposite bool value.
   function _not(bool _value) internal pure returns (bool) {
     return !_value;
+  }
+
+  /// @dev Inspired by OZ implementation.
+  function _revert(bytes memory _returnData) private pure {
+    // Look for revert reason and bubble it up if present
+    if (_returnData.length > 0) {
+      // The easiest way to bubble the revert reason is using memory via assembly
+      assembly {
+        let returndata_size := mload(_returnData)
+        revert(add(32, _returnData), returndata_size)
+      }
+    }
+    revert ViewCallFailed();
   }
 
   function _notEmergency() internal view {

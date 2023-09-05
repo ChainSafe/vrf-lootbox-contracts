@@ -331,7 +331,7 @@ module.exports = {
   solidity: {
     version: '0.8.20',
     settings: {
-      optimizer: { enabled: true, runs: 99 },
+      optimizer: { enabled: true, runs: 120 },
     },
   },
   defaultNetwork: 'localhost',

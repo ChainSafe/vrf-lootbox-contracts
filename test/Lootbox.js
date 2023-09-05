@@ -3359,6 +3359,15 @@ describe('Lootbox', function () {
       .withArgs(requestId, lootbox.interface.encodeErrorResult('InvalidRequestAllocation', [requestId]));
   });
 
+  it('should revert on unknown function call', async function () {
+    const { lootbox } = await loadFixture(deployLootbox);
+    const [owner] = await ethers.getSigners();
+    await expect(owner.sendTransaction({to: lootbox.address}))
+      .to.be.revertedWithCustomError(lootbox, 'ViewCallFailed');
+    await expect(owner.sendTransaction({to: lootbox.address, data: '0x12345678'}))
+      .to.be.revertedWithCustomError(lootbox, 'ViewCallFailed');
+  });
+
   // describe.skip('LINK payment', function() {
   //   it.skip('should allow LINK as ERC677 transfer and call to create an open request', async function () {});
   //   it.skip('should restrict other tokens as ERC677 transfer and call', async function () {});

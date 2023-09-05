@@ -251,6 +251,9 @@ abstract contract LootboxInterface is VRFV2WrapperConsumerBase, ERC721Holder, ER
   /// @notice Contrat was put into emergency mode and stopped operations
   error EndOfService();
 
+  /// @notice View function reverted without reason
+  error ViewCallFailed();
+
   /// @notice Sets the URI for the contract.
   /// @param _baseURI The base URI being used.
   function setURI(string memory _baseURI) external virtual;
