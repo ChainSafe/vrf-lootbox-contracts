@@ -286,11 +286,10 @@ task('inventory', 'Get inventory')
 .addOptionalParam('factory', 'LootboxFactory address')
 .addOptionalParam('id', 'Lootbox id for contract address predictability', 0, types.int)
 .setAction(async ({ factory, id }) => {
-  assert(network.name == 'localhost', 'Only for testing');
   const { chainId } = network.config;
   assert(chainId, 'Missing network configuration!');
 
-  const [deployer, supplier] = await ethers.getSigners();
+  const [deployer] = await ethers.getSigners();
 
   const predictedAddress = ethers.utils.getContractAddress({
     from: deployer.address,
@@ -325,6 +324,87 @@ task('devsetup', 'Do everything')
   await hre.run('set-amountperunit', { type: 'ERC1155', tokenid: 4, amountperunit: 50 });
   await hre.run('mint');
   await hre.run('inventory');
+});
+
+task('deploy-test-rewards', 'Deploys test reward tokens, allow them in the lootbox, and give supplier role to the deployer')
+.addParam('factory', 'LootboxFactory address')
+.addOptionalParam('id', 'Lootbox id for contract address predictability', 0, types.int)
+.setAction(async ({ factory, id }) => {
+  assert(network.name == 'localhost', 'Only for testing');
+  const { chainId } = network.config;
+  assert(chainId, 'Missing network configuration!');
+
+  const [deployer] = await ethers.getSigners();
+
+  const { linkToken } = networkConfig[chainId];
+  const link = await ethers.getContractAt('IERC20', linkToken);
+
+  const lootboxFactory = await ethers.getContractAt('LootboxFactory', factory);
+  const lootboxAddress = await lootboxFactory.getLootbox(deployer.address, id);
+
+  await(await link.connect(deployer)
+    .transfer(lootboxAddress, ethers.utils.parseUnits(linkamount.toString()))).wait();
+  console.log(`Transferred ${linkamount} LINK to the lootbox contract.`);
+
+  const lootbox = await ethers.getContractAt('LootboxInterface', lootboxAddress);
+  await (await lootbox.addSuppliers([deployer.address])).wait();
+  console.log(`Supplier ${deployer.address} added to the lootbox contract.`);
+
+  const erc20 = await deploy('MockERC20', deployer, 100000);
+  const erc721 = await deploy('MockERC721', deployer, 20);
+  const erc1155 = await deploy('MockERC1155', deployer, 10, 1000);
+  const erc1155NFT = await deploy('MockERC1155NFT', deployer, 15);
+
+  await (await lootbox.connect(deployer).addTokens([
+    erc20.address,
+    erc721.address,
+    erc1155.address,
+    erc1155NFT.address,
+  ])).wait();
+  console.log('Allowed tokens to be used as rewards in the lootbox contract.');
+  console.log('Test tokens:');
+  console.log(`ERC20: ${erc20.address}`);
+  console.log(`ERC721: ${erc721.address}`);
+  console.log(`ERC1155: ${erc1155.address}`);
+  console.log(`ERC1155NFT: ${erc1155NFT.address}`);
+  console.log('You can now add rewards with those tokens.');
+});
+
+task('supply-test-rewards', 'Transfer test rewards to the previously deployed lootbox contract')
+.addParam('token', 'Address of the test reward token contract')
+.addOptionalParam('factory', 'LootboxFactory address')
+.addOptionalParam('id', 'Lootbox id for contract address predictability', 0, types.int)
+.addOptionalParam('type', 'Reward token type, ERC20, ERC721, ERC1155 or ERC1155NFT', 'ERC721')
+.addOptionalParam('tokenid', 'Reward token id, not needed for ERC20', 0, types.int)
+.addOptionalParam('amount', 'Reward token amount, not needed for ERC721 and ERC1155NFT', 1, types.int)
+.setAction(async ({ factory, id, type, token, tokenid, amount }) => {
+  const { chainId } = network.config;
+  assert(chainId, 'Missing network configuration!');
+
+  const [deployer] = await ethers.getSigners();
+
+  const erc20 = await ethers.getContractAt('MockERC20', token);
+  const erc721 = await ethers.getContractAt('MockERC721', token);
+  const erc1155 = await ethers.getContractAt('MockERC1155', token);
+  const erc1155NFT = await ethers.getContractAt('MockERC1155NFT', token);
+
+  const lootboxFactory = await ethers.getContractAt('LootboxFactory', factory);
+  const lootboxAddress = await lootboxFactory.getLootbox(deployer.address, id);
+
+  if (type == 'ERC20') {
+    await (await erc20.connect(deployer).transfer(lootboxAddress, amount)).wait();
+  } else if (type == 'ERC721') {
+    await (await erc721.connect(deployer)['safeTransferFrom(address,address,uint256)'](deployer.address, lootboxAddress, tokenid)).wait();
+  } else if (type == 'ERC1155') {
+    assert(amount > 1, 'ERC1155 should be transferred in amount > 1 to not make it ERC1155NFT in the lootbox contract.');
+    await (await erc1155.connect(deployer).safeTransferFrom(deployer.address, lootboxAddress, tokenid, amount, '0x')).wait();
+  } else if (type == 'ERC1155NFT') {
+    await (await erc1155NFT.connect(deployer).safeTransferFrom(deployer.address, lootboxAddress, tokenid, 1, '0x')).wait();
+  } else {
+    throw new Error(`Unexpected reward type: ${type}`);
+  }
+
+  console.log(`Rewards supplied ${type}.`);
 });
 
 module.exports = {
