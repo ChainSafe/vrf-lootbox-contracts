@@ -335,15 +335,8 @@ task('deploy-test-rewards', 'Deploys test reward tokens, allow them in the lootb
 
   const [deployer] = await ethers.getSigners();
 
-  const { linkToken } = networkConfig[chainId];
-  const link = await ethers.getContractAt('IERC20', linkToken);
-
   const lootboxFactory = await ethers.getContractAt('LootboxFactory', factory);
   const lootboxAddress = await lootboxFactory.getLootbox(deployer.address, id);
-
-  await(await link.connect(deployer)
-    .transfer(lootboxAddress, ethers.utils.parseUnits(linkamount.toString()))).wait();
-  console.log(`Transferred ${linkamount} LINK to the lootbox contract.`);
 
   const lootbox = await ethers.getContractAt('LootboxInterface', lootboxAddress);
   await (await lootbox.addSuppliers([deployer.address])).wait();
