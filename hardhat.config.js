@@ -330,7 +330,6 @@ task('deploy-test-rewards', 'Deploys test reward tokens, allow them in the lootb
 .addParam('factory', 'LootboxFactory address')
 .addOptionalParam('id', 'Lootbox id for contract address predictability', 0, types.int)
 .setAction(async ({ factory, id }) => {
-  assert(network.name == 'localhost', 'Only for testing');
   const { chainId } = network.config;
   assert(chainId, 'Missing network configuration!');
 
