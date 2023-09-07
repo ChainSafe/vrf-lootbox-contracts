@@ -249,7 +249,7 @@ task('fulfill', 'Set amount per unit of reward for a reward token')
 .addOptionalParam('id', 'Lootbox id for contract address predictability', 0, types.int)
 .addOptionalParam('user', 'User address that requested to open something')
 .addOptionalParam('gas', 'Fulfillment gas limit', 2500000, types.int)
-.setAction(async ({ factory, id, user: userAddr }) => {
+.setAction(async ({ factory, id, user: userAddr, gas }) => {
   assert(network.name == 'localhost', 'Only for testing');
   const { chainId } = network.config;
   assert(chainId, 'Missing network configuration!');
