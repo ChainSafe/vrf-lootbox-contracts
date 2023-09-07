@@ -273,7 +273,7 @@ task('fulfill', 'Set amount per unit of reward for a reward token')
 
   const impersonatedVRFWrapper = await ethers.getImpersonatedSigner(vrfV2Wrapper);
   const randomWord = ethers.BigNumber.from(ethers.utils.randomBytes(32));
-  await (await link.connect(impersonatedVRFWrapper)
+  await (await lootbox.connect(impersonatedVRFWrapper)
     .rawFulfillRandomWords(requestId, [randomWord], { gasLimit: gas })).wait();
 
   const requestIdAfter = await lootbox.openerRequests(userAddr);
