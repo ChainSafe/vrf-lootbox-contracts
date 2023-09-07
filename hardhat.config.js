@@ -1,3 +1,4 @@
+const { setBalance } = require('@nomicfoundation/hardhat-network-helpers');
 require('@nomicfoundation/hardhat-toolbox');
 require('hardhat-docgen');
 require('dotenv').config();
@@ -244,7 +245,7 @@ task('mint', 'Mint lootboxes')
   console.log(`${amount} lootboxes worth of ${tokenid} reward units each minted to ${userAddr}`);
 });
 
-task('fulfill', 'Set amount per unit of reward for a reward token')
+task('fulfill', 'Fulfill an open request to allocate rewards')
 .addOptionalParam('factory', 'LootboxFactory address')
 .addOptionalParam('id', 'Lootbox id for contract address predictability', 0, types.int)
 .addOptionalParam('user', 'User address that requested to open something')
@@ -271,6 +272,7 @@ task('fulfill', 'Set amount per unit of reward for a reward token')
   const requestId = await lootbox.openerRequests(userAddr);
   assert(requestId.gt('0'), `Open request not found for user ${userAddr}`);
 
+  await setBalance(vrfV2Wrapper, ethers.utils.parseUnits('10'));
   const impersonatedVRFWrapper = await ethers.getImpersonatedSigner(vrfV2Wrapper);
   const randomWord = ethers.BigNumber.from(ethers.utils.randomBytes(32));
   await (await lootbox.connect(impersonatedVRFWrapper)
