@@ -2596,6 +2596,7 @@ describe('Lootbox', function () {
     await expect(vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [7]))
       .to.emit(lootbox, 'OpenRequestFailed')
       .withArgs(requestId, '0x');
+    expect(await lootbox.openerRequests(user.address)).to.equal(requestId);
     const tx = lootbox.connect(user).recoverBoxes(user.address);
     await expectContractEvents(tx, lootbox, [
       ['TransferBatch', user.address, ZERO_ADDRESS, user.address, [1, 2], [10, 15]],
@@ -2624,6 +2625,7 @@ describe('Lootbox', function () {
     await expect(vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [7]))
       .to.emit(lootbox, 'OpenRequestFailed')
       .withArgs(requestId, '0x');
+    expect(await lootbox.openerRequests(user.address)).to.equal(requestId);
     const tx = lootbox.connect(supplier).recoverBoxes(user.address);
     await expectContractEvents(tx, lootbox, [
       ['TransferBatch', supplier.address, ZERO_ADDRESS, user.address, [1, 2], [10, 15]],
@@ -2652,6 +2654,7 @@ describe('Lootbox', function () {
     await expect(vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [7]))
       .to.emit(lootbox, 'OpenRequestFailed')
       .withArgs(requestId, '0x');
+    expect(await lootbox.openerRequests(user.address)).to.equal(requestId);
     const tx = lootbox.connect(user).recoverBoxes(supplier.address);
     await expect(tx).to.be.revertedWithCustomError(lootbox, 'NothingToRecover');
   });
@@ -2690,6 +2693,7 @@ describe('Lootbox', function () {
     await expect(vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [7]))
       .to.emit(lootbox, 'OpenRequestFailed')
       .withArgs(requestId, '0x');
+    expect(await lootbox.openerRequests(user.address)).to.equal(requestId);
     await lootbox.connect(supplier).recoverBoxes(user.address);
     const tx = lootbox.connect(supplier).recoverBoxes(user.address);
     await expect(tx).to.be.revertedWithCustomError(lootbox, 'NothingToRecover');
@@ -3306,9 +3310,11 @@ describe('Lootbox', function () {
     await expect(vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [7]))
       .to.emit(lootbox, 'OpenRequestFailed')
       .withArgs(requestId, '0x');
+    expect(await lootbox.openerRequests(user.address)).to.equal(requestId);
     await expect(lootbox.connect(vrfWrapperSigner).rawFulfillRandomWords(requestId, [7]))
       .to.emit(lootbox, 'OpenRequestFailed')
       .withArgs(requestId, lootbox.interface.encodeErrorResult('InvalidRequestAllocation', [requestId]));
+    expect(await lootbox.openerRequests(user.address)).to.equal(requestId);
   });
   it('should restrict rewards allocation for an absent request', async function () {
     const { lootbox, erc20, erc721, erc1155NFT, erc1155, link,
@@ -3354,6 +3360,7 @@ describe('Lootbox', function () {
     let requestId = await lootbox.openerRequests(user.address);
     await expect(vrfWrapper.connect(vrfCoordinator).rawFulfillRandomWords(requestId, [7]))
       .to.emit(lootbox, 'OpenRequestFulfilled');
+    expect(await lootbox.openerRequests(user.address)).to.equal(0);
     await expect(lootbox.connect(vrfWrapperSigner).rawFulfillRandomWords(requestId, [7]))
       .to.emit(lootbox, 'OpenRequestFailed')
       .withArgs(requestId, lootbox.interface.encodeErrorResult('InvalidRequestAllocation', [requestId]));
@@ -3408,6 +3415,7 @@ describe('Lootbox', function () {
       const requestId = await lootbox.openerRequests(user.address);
       await expect(tx).to.emit(lootbox, 'OpenRequested')
         .withArgs(user.address, 1, requestId);
+      expect(requestId).to.not.equal(0);
       await expect(tx).to.changeEtherBalance(user.address, price.mul('-1'));
       await expect(tx).to.changeEtherBalance(factory.address, 0);
       await expect(tx).to.changeEtherBalance(lootbox.address, price);
@@ -3639,6 +3647,7 @@ describe('Lootbox', function () {
         balance: 20,
         extra: [],
       }], []);
+      expect(await lootbox.openerRequests(user.address)).to.equal(0);
       expect(await lootbox.balanceOf(user.address, 1)).to.equal(2);
       expect(await lootbox.balanceOf(user.address, 2)).to.equal(0);
       expect(await lootbox.unitsSupply()).to.equal(2);
@@ -3689,6 +3698,7 @@ describe('Lootbox', function () {
         balance: NOT_USED,
         extra: [NFT(5)],
       }], []);
+      expect(await lootbox.openerRequests(user.address)).to.equal(0);
       expect(await lootbox.balanceOf(user.address, 1)).to.equal(3);
       expect(await lootbox.balanceOf(user.address, 2)).to.equal(2);
       expect(await lootbox.unitsSupply()).to.equal(1);
@@ -3753,6 +3763,7 @@ describe('Lootbox', function () {
           balance: 8,
         }],
       }], []);
+      expect(await lootbox.openerRequests(user.address)).to.equal(0);
       expect(await lootbox.balanceOf(user.address, 1)).to.equal(2);
       expect(await lootbox.balanceOf(user.address, 2)).to.equal(0);
       expect(await lootbox.unitsSupply()).to.equal(2);
@@ -3800,6 +3811,7 @@ describe('Lootbox', function () {
         balance: NOT_USED,
         extra: [NFT(5)],
       }], []);
+      expect(await lootbox.openerRequests(user.address)).to.equal(0);
       expect(await lootbox.balanceOf(user.address, 1)).to.equal(3);
       expect(await lootbox.balanceOf(user.address, 2)).to.equal(2);
       expect(await lootbox.unitsSupply()).to.equal(1);
@@ -3937,6 +3949,7 @@ describe('Lootbox', function () {
           balance: 50,
         }],
       }]);
+      expect(await lootbox.openerRequests(user.address)).to.equal(0);
       expect(await lootbox.balanceOf(user.address, 1)).to.equal(3);
       expect(await lootbox.balanceOf(user.address, 2)).to.equal(2);
       expect(await lootbox.unitsSupply()).to.equal(7);
