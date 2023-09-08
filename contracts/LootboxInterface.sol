@@ -323,9 +323,13 @@ abstract contract LootboxInterface is VRFV2WrapperConsumerBase, ERC721Holder, ER
   /// @return uint Array of lootbox types that have been minted.
   function getLootboxTypes() external virtual view returns (uint[] memory);
 
-  /// @notice Gets allowed token values for the contract.
-  /// @return address Array of token addresses if they exist and are allowed.
+  /// @notice Gets allowed reward tokens for the contract.
+  /// @return address Array of reward tokens addresses if they exist and are allowed.
   function getAllowedTokens() external virtual view returns (address[] memory);
+
+  /// @notice Gets allowed token reward types for the contract.
+  /// @return result Array of token reward types in the same order as getAllowedTokens().
+  function getAllowedTokenTypes() external virtual view returns (RewardType[] memory result);
 
   /// @notice Gets authorized suppliers for the contract.
   /// @return address Array of addresses if they exist and are allowed to supply.

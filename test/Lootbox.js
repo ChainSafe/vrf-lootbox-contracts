@@ -157,6 +157,7 @@ describe('Lootbox', function () {
     expect(await lootbox.getSuppliers()).to.eql([]);
     expect(await lootbox.getLootboxTypes()).to.eql([]);
     expect(await lootbox.getAllowedTokens()).to.eql([]);
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([]);
     expect(await lootbox.getInventory()).to.eql([[], []]);
     expect(await lootbox.unitsSupply()).to.equal(0);
     expect(await lootbox.unitsRequested()).to.equal(0);
@@ -262,12 +263,14 @@ describe('Lootbox', function () {
       .to.emit(lootbox, 'TokenAdded')
       .withArgs(erc20.address);
     expect(await lootbox.getAllowedTokens()).to.eql([erc20.address]);
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.UNSET]);
     await expect(lootbox.addTokens([erc721.address, erc1155.address]))
       .to.emit(lootbox, 'TokenAdded')
       .withArgs(erc721.address)
       .to.emit(lootbox, 'TokenAdded')
       .withArgs(erc1155.address);
     expect(await lootbox.getAllowedTokens()).to.eql([erc20.address, erc721.address, erc1155.address]);
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.UNSET, RewardType.UNSET, RewardType.UNSET]);
   });
   it('should not emit events when allowing duplicate tokens', async function () {
     const { lootbox, erc20, erc721, erc1155 } = await loadFixture(deployLootbox);
@@ -277,6 +280,7 @@ describe('Lootbox', function () {
       .to.emit(lootbox, 'TokenAdded')
       .withArgs(erc721.address);
     expect(await lootbox.getAllowedTokens()).to.eql([erc20.address, erc721.address]);
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.UNSET, RewardType.UNSET]);
   });
   it('should restrict others to allow tokens', async function () {
     const { lootbox } = await loadFixture(deployLootbox);
@@ -291,6 +295,7 @@ describe('Lootbox', function () {
     const [owner] = await ethers.getSigners();
     await lootbox.addTokens([erc20.address, erc721.address, erc1155.address]);
     expect(await lootbox.getAllowedTokens()).to.eql([erc20.address, erc721.address, erc1155.address]);
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.UNSET, RewardType.UNSET, RewardType.UNSET]);
   });
 
   it('should allow admin to withdraw native currency', async function () {
@@ -1815,6 +1820,7 @@ describe('Lootbox', function () {
     await lootbox.addTokens([erc721.address]);
     await lootbox.addSuppliers([supplier.address]);
     await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 0);
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC721]);
   });
   it('should restrict others to supply allowed ERC721', async function () {
     const { lootbox, erc721 } = await loadFixture(deployLootbox);
@@ -1846,6 +1852,7 @@ describe('Lootbox', function () {
     await lootbox.addSuppliers([supplier.address]);
     await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 0);
     await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 3);
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC721]);
   });
   it('should restrict supplier to supply ERC721 if it was already assigned a different type', async function () {
     const { lootbox, erc721 } = await loadFixture(deployLootbox);
@@ -1873,6 +1880,7 @@ describe('Lootbox', function () {
       extra: [NFT(0)],
     }], []);
     expect(await lootbox.unitsSupply()).to.equal(1);
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC721]);
   });
 
   it('should allow supplier to supply single allowed ERC1155 NFT', async function () {
@@ -1881,6 +1889,7 @@ describe('Lootbox', function () {
     await lootbox.addTokens([erc1155NFT.address]);
     await lootbox.addSuppliers([supplier.address]);
     await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x');
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155NFT]);
   });
   it('should restrict others to supply single allowed ERC1155 NFT', async function () {
     const { lootbox, erc1155NFT } = await loadFixture(deployLootbox);
@@ -1909,6 +1918,7 @@ describe('Lootbox', function () {
     await lootbox.addSuppliers([supplier.address]);
     await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x');
     await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 1, '0x');
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155NFT]);
   });
   it('should restrict supplier to supply single ERC1155 NFT if it was already assigned a different type', async function () {
     const { lootbox, erc1155NFT } = await loadFixture(deployLootbox);
@@ -1936,6 +1946,7 @@ describe('Lootbox', function () {
       extra: [NFT(0)],
     }], []);
     expect(await lootbox.unitsSupply()).to.equal(1);
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155NFT]);
   });
   it('should put resupplied single ERC1155 NFT into leftovers if configured with 0 reward per unit', async function () {
     const { lootbox, erc1155NFT } = await loadFixture(deployLootbox);
@@ -1954,6 +1965,7 @@ describe('Lootbox', function () {
       extra: [NFT(0), NFT(1)],
     }]);
     expect(await lootbox.unitsSupply()).to.equal(0);
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155NFT]);
   });
   it('should restrict supplier to resupply single ERC1155 NFT if this ID was already supplied', async function () {
     const { lootbox, erc1155 } = await loadFixture(deployLootbox);
@@ -1993,6 +2005,7 @@ describe('Lootbox', function () {
     await lootbox.addTokens([erc1155NFT.address]);
     await lootbox.addSuppliers([supplier.address]);
     await erc1155NFT.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [0, 1], [1, 1], '0x');
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155NFT]);
   });
   it('should restrict others to supply multiple allowed ERC1155 NFT', async function () {
     const { lootbox, erc1155NFT } = await loadFixture(deployLootbox);
@@ -2025,6 +2038,7 @@ describe('Lootbox', function () {
     await lootbox.addSuppliers([supplier.address]);
     await erc1155NFT.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [0], [1], '0x');
     await erc1155NFT.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [1, 2], [1, 1], '0x');
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155NFT]);
   });
   it('should restrict supplier to supply multiple ERC1155 NFT if it was already assigned a different type', async function () {
     const { lootbox, erc1155NFT } = await loadFixture(deployLootbox);
@@ -2054,6 +2068,7 @@ describe('Lootbox', function () {
       extra: [NFT(0), NFT(1)],
     }], []);
     expect(await lootbox.unitsSupply()).to.equal(2);
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155NFT]);
   });
   it('should put resupplied multiple ERC1155 NFT into leftovers if configured with 0 reward per unit', async function () {
     const { lootbox, erc1155NFT } = await loadFixture(deployLootbox);
@@ -2072,6 +2087,7 @@ describe('Lootbox', function () {
       extra: [NFT(0), NFT(1), NFT(2)],
     }]);
     expect(await lootbox.unitsSupply()).to.equal(0);
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155NFT]);
   });
   it('should restrict supplier to resupply multiple ERC1155 NFT if this ID was already supplied', async function () {
     const { lootbox, erc1155 } = await loadFixture(deployLootbox);
@@ -2116,6 +2132,7 @@ describe('Lootbox', function () {
     await lootbox.addTokens([erc1155.address]);
     await lootbox.addSuppliers([supplier.address]);
     await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 5, '0x');
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155]);
   });
   it('should restrict others to supply single allowed ERC1155', async function () {
     const { lootbox, erc1155 } = await loadFixture(deployLootbox);
@@ -2147,6 +2164,7 @@ describe('Lootbox', function () {
     await lootbox.setAmountsPerUnit([erc1155.address], [0], [11]);
     await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 5, '0x');
     await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 6, '0x');
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155]);
   });
   it('should restrict supplier to supply single ERC1155 if it was already assigned a different type', async function () {
     const { lootbox, erc1155 } = await loadFixture(deployLootbox);
@@ -2179,6 +2197,7 @@ describe('Lootbox', function () {
       }],
     }]);
     expect(await lootbox.unitsSupply()).to.equal(0);
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155]);
   });
   it('should put resupplied single ERC1155 into leftovers if configured with 0 reward per unit', async function () {
     const { lootbox, erc1155 } = await loadFixture(deployLootbox);
@@ -2202,6 +2221,7 @@ describe('Lootbox', function () {
       }],
     }]);
     expect(await lootbox.unitsSupply()).to.equal(0);
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155]);
   });
   it('should put resupplied single ERC1155 into leftovers if there is a remainder', async function () {
     const { lootbox, erc1155 } = await loadFixture(deployLootbox);
@@ -2237,6 +2257,7 @@ describe('Lootbox', function () {
       }],
     }]);
     expect(await lootbox.unitsSupply()).to.equal(1);
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155]);
   });
   it('should allow supplier to resupply single ERC1155 if this ID was already supplied', async function () {
     const { lootbox, erc1155 } = await loadFixture(deployLootbox);
@@ -2245,6 +2266,7 @@ describe('Lootbox', function () {
     await lootbox.addSuppliers([supplier.address]);
     await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 2, '0x');
     await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 10, '0x');
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155]);
   });
   it('should restrict supplier to supply single ERC1155 with zero value', async function () {
     const { lootbox, erc1155 } = await loadFixture(deployLootbox);
@@ -2265,6 +2287,7 @@ describe('Lootbox', function () {
     await lootbox.addTokens([erc1155.address]);
     await lootbox.addSuppliers([supplier.address]);
     await erc1155.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [0, 1], [5, 8], '0x');
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155]);
   });
   it('should restrict others to supply multiple allowed ERC1155', async function () {
     const { lootbox, erc1155 } = await loadFixture(deployLootbox);
@@ -2300,6 +2323,7 @@ describe('Lootbox', function () {
     await erc1155.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [0, 1, 2], [11, 13, 33], '0x');
     await lootbox.setAmountsPerUnit([erc1155.address, erc1155.address], [0, 1], [11, 13]);
     await erc1155.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [0, 1, 2], [11, 13, 33], '0x');
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155]);
   });
   it('should restrict supplier to supply multiple ERC1155 if it was already assigned a different type', async function () {
     const { lootbox, erc1155 } = await loadFixture(deployLootbox);
@@ -2353,6 +2377,7 @@ describe('Lootbox', function () {
       }],
     }]);
     expect(await lootbox.unitsSupply()).to.equal(1);
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155]);
   });
   it('should put resupplied multiple ERC1155 into leftovers if configured with 0 reward per unit', async function () {
     const { lootbox, erc1155 } = await loadFixture(deployLootbox);
@@ -2381,6 +2406,7 @@ describe('Lootbox', function () {
       }],
     }]);
     expect(await lootbox.unitsSupply()).to.equal(0);
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155]);
   });
   it('should put resupplied multiple ERC1155 into leftovers if there is a remainder', async function () {
     const { lootbox, erc1155 } = await loadFixture(deployLootbox);
@@ -2426,6 +2452,7 @@ describe('Lootbox', function () {
       }],
     }]);
     expect(await lootbox.unitsSupply()).to.equal(2);
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155]);
   });
   it('should allow supplier to resupply multiple ERC1155 if this ID was already supplied', async function () {
     const { lootbox, erc1155 } = await loadFixture(deployLootbox);
@@ -2434,6 +2461,7 @@ describe('Lootbox', function () {
     await lootbox.addSuppliers([supplier.address]);
     await erc1155.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [0], [2], '0x');
     await erc1155.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [0, 1, 1], [10, 10, 20], '0x');
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155]);
   });
   it('should restrict supplier to supply multiple ERC1155 with zero value', async function () {
     const { lootbox, erc1155 } = await loadFixture(deployLootbox);
@@ -3955,6 +3983,10 @@ describe('Lootbox', function () {
       expect(await lootbox.unitsSupply()).to.equal(7);
       expect(await lootbox.unitsRequested()).to.equal(0);
       expect(await lootbox.getAvailableSupply()).to.equal(7);
+      expect(await lootbox.getAllowedTokenTypes()).to.eql([
+        RewardType.ERC20, RewardType.ERC721, RewardType.ERC1155NFT, RewardType.ERC1155,
+        RewardType.ERC20, RewardType.ERC721, RewardType.ERC1155NFT, RewardType.ERC1155,
+      ]);
       price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 7);
       await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1, 2], [3, 2], {value: price});
       requestId = await lootbox.openerRequests(user.address);
@@ -4015,6 +4047,10 @@ describe('Lootbox', function () {
       expect(await lootbox.unitsSupply()).to.equal(0);
       expect(await lootbox.unitsRequested()).to.equal(0);
       expect(await lootbox.getAvailableSupply()).to.equal(0);
+      expect(await lootbox.getAllowedTokenTypes()).to.eql([
+        RewardType.ERC20, RewardType.ERC721, RewardType.ERC1155NFT, RewardType.ERC1155,
+        RewardType.ERC20, RewardType.ERC721, RewardType.ERC1155NFT, RewardType.ERC1155,
+      ]);
     });
     it('should move remainder of ERC721 rewards to leftovers', async function () {
       const { lootbox, erc721, link, vrfWrapper, vrfCoordinator } = await loadFixture(deployLootbox);
