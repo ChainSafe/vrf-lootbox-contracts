@@ -167,10 +167,21 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155PresetMinterPauser {
     return lootboxTypes.values();
   }
 
-  /// @notice Gets allowed token values for the contract.
-  /// @return address Array of token addresses if they exist and are allowed.
+  /// @notice Gets allowed reward tokens for the contract.
+  /// @return address Array of reward tokens addresses if they exist and are allowed.
   function getAllowedTokens() external view returns (address[] memory) {
     return allowedTokens.values();
+  }
+
+  /// @notice Gets allowed token reward types for the contract.
+  /// @return result Array of token reward types in the same order as getAllowedTokens().
+  function getAllowedTokenTypes() external view returns (RewardType[] memory result) {
+    uint len = allowedTokens.length();
+    result = new RewardType[](len);
+    for (uint i = 0; i < len; ++i) {
+      result[i] = rewards[allowedTokens.at(i)].rewardType;
+    }
+    return result;
   }
 
   /// @notice Gets authorized suppliers for the contract.
@@ -273,7 +284,6 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155PresetMinterPauser {
         }
       } else {
         // Same as with ERC20, ERC1155 could have a particular asset ID simultaneously in the inventory and leftovers.
-        // TODO: refactor code duplication.
         EnumerableSet.UintSet storage extraTokenIds = extraIds[token];
         ExtraRewardInfo[] memory extra = new ExtraRewardInfo[](extraTokenIds.length());
         uint l = 0;
