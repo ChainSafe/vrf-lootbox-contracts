@@ -142,6 +142,14 @@ describe('Lootbox', function () {
     expect((await lootbox.getLootboxTypes()).map(el => el.toNumber())).to.eql(expectedTypes);
   };
 
+  const expectRequest = async (lootbox, opener, ...expectedRequest) => {
+    const request = await lootbox.getOpenerRequestDetails(opener);
+    expect(request.opener).to.equal(expectedRequest[0]);
+    expect(request.unitsToGet).to.equal(expectedRequest[1]);
+    expect(bnToNumber(request.lootIds), 'Unexpected lootIds').to.eql(expectedRequest[2]);
+    expect(bnToNumber(request.lootAmounts), 'Unexpected lootAmounts').to.eql(expectedRequest[3]);
+  };
+
   it('should deploy lootbox and have valid defaults', async function () {
     const { lootbox, factory, ADMIN, MINTER, PAUSER } = await loadFixture(deployLootbox);
     const [owner] = await ethers.getSigners();
@@ -2625,6 +2633,7 @@ describe('Lootbox', function () {
       .to.emit(lootbox, 'OpenRequestFailed')
       .withArgs(requestId, '0x');
     expect(await lootbox.openerRequests(user.address)).to.equal(requestId);
+    await expectRequest(lootbox, user.address, user.address, 0, [1, 2], [10, 15]);
     const tx = lootbox.connect(user).recoverBoxes(user.address);
     await expectContractEvents(tx, lootbox, [
       ['TransferBatch', user.address, ZERO_ADDRESS, user.address, [1, 2], [10, 15]],
@@ -3438,8 +3447,10 @@ describe('Lootbox', function () {
       await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
       await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [10]);
       const price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 1);
+      await expectRequest(lootbox, user.address, ZERO_ADDRESS, 0, [], []);
       const tx = lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [1], {value: price});
       await tx;
+      await expectRequest(lootbox, user.address, user.address, 1, [1], [1]);
       const requestId = await lootbox.openerRequests(user.address);
       await expect(tx).to.emit(lootbox, 'OpenRequested')
         .withArgs(user.address, 1, requestId);

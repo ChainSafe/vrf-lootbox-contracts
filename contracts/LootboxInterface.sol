@@ -362,6 +362,12 @@ abstract contract LootboxInterface is VRFV2WrapperConsumerBase, ERC721Holder, ER
   /// @return bool True if claim is possible, otherwise false.
   function canClaimRewards(address _opener) public view virtual returns (bool);
 
+  /// @notice Returns details of the lootbox open request.
+  /// @notice If request is not empty but unitsToGet == 0, then user need to recoverBoxes().
+  /// @param _opener The address of the user that opened the lootbox.
+  /// @return request empty if there are no pending request.
+  function getOpenerRequestDetails(address _opener) external virtual view returns (Request memory request);
+
   /// @notice Gets the LINK token address.
   /// @return address The address of the LINK token.
   function getLink() external view virtual returns (address);
