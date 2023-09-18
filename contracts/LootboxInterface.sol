@@ -160,6 +160,16 @@ abstract contract LootboxInterface is VRFV2WrapperConsumerBase, ERC721Holder, ER
   /// @param amount The amount withdrawn
   event Withdraw(address token, address to, uint amount);
 
+  /// @notice Emitted when an admin sets purchase price
+  /// @param newPrice The amount of native currency to pay to buy a lootbox, or 0 if disabled
+  event PriceUpdated(uint newPrice);
+
+  /// @notice Emitted when user buys lootboxes
+  /// @param buyer The address of the user that purchased lootboxes
+  /// @param amount The amount of id 1 lootboxes sold
+  /// @param payment The amount of native currency user paid
+  event Sold(address buyer, uint amount, uint payment);
+
   /*//////////////////////////////////////////////////////////////
                                 ERRORS
   //////////////////////////////////////////////////////////////*/
@@ -254,6 +264,9 @@ abstract contract LootboxInterface is VRFV2WrapperConsumerBase, ERC721Holder, ER
   /// @notice View function reverted without reason
   error ViewCallFailed();
 
+  /// @notice Purchase price is unexpectedly high or zero
+  error UnexpectedPrice(uint currentPrice);
+
   /// @notice Sets the URI for the contract.
   /// @param _baseURI The base URI being used.
   function setURI(string memory _baseURI) external virtual;
@@ -289,6 +302,25 @@ abstract contract LootboxInterface is VRFV2WrapperConsumerBase, ERC721Holder, ER
   /// @dev The user must have some rewards allocated.
   /// @param _opener The address of the user that has an allocation after opening.
   function claimRewards(address _opener) external virtual;
+
+
+  /*//////////////////////////////////////////////////////////////
+                           BUY FUNCTIONS
+  //////////////////////////////////////////////////////////////*/
+
+  /// @notice Sets the native currency price to buy a lootbox.
+  /// @notice Set to 0 to prevent sales.
+  /// @param _newPrice An amount of native currency user needs to pay to get a single lootbox.
+  function setPrice(uint _newPrice) external virtual;
+
+  /// @notice Gets the native currency price to buy a lootbox.
+  function getPrice() external view virtual returns(uint);
+
+  /// @notice Mints requested amount of lootboxes for the caller assuming valid payment.
+  /// @notice Remainder is sent back to the caller.
+  /// @param _amount An amount lootboxes to mint.
+  /// @param _maxPrice A maximum price the caller is willing to pay per lootbox.
+  function buy(uint _amount, uint _maxPrice) external payable virtual;
 
   /// @notice Used to recover lootboxes for an address.
   /// @param _opener The address that opened the boxes.
@@ -375,6 +407,8 @@ abstract contract LootboxInterface is VRFV2WrapperConsumerBase, ERC721Holder, ER
   /// @notice Gets the VRF wrapper for the contract.
   /// @return address The address of the VRF wrapper.
   function getVRFV2Wrapper() external view virtual returns (address);
+
+  function getLinkPrice() external view virtual returns (uint);
 
   function supportsInterface(bytes4 interfaceId)
     public

@@ -59,6 +59,10 @@ Set amounts per unit
     npm run hardhat -- set-amountperunit --type ERC1155 --tokenid 3 --amountperunit 35
     npm run hardhat -- set-amountperunit --type ERC1155 --tokenid 4 --amountperunit 50
 
+Set price per lootbox 
+
+    npm run hardhat -- set-price --price 0.001
+
 Mint lootboxes to the user. TokenId represents how many rewards user will get per lootbox.
 
     npm run hardhat -- mint

@@ -18,6 +18,7 @@ import {VRFV2WrapperInterface} from '@chainlink/contracts/src/v0.8/interfaces/VR
 import {VRFV2WrapperConsumerBase} from '@chainlink/contracts/src/v0.8/VRFV2WrapperConsumerBase.sol';
 import {ILootboxFactory} from './interfaces/ILootboxFactory.sol';
 import {IVRFV2Wrapper, AggregatorV3Interface} from './interfaces/IVRFV2Wrapper.sol';
+import {LootboxInterface} from './LootboxInterface.sol';
 
 //  $$$$$$\  $$\   $$\  $$$$$$\  $$$$$$\ $$\   $$\  $$$$$$\   $$$$$$\  $$$$$$$$\ $$$$$$$$\ 
 // $$  __$$\ $$ |  $$ |$$  __$$\ \_$$  _|$$$\  $$ |$$  __$$\ $$  __$$\ $$  _____|$$  _____|
@@ -106,13 +107,13 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   }
 
   ILootboxFactory private immutable FACTORY;
-  AggregatorV3Interface private immutable LINK_ETH_FEED;
   address private immutable VIEW;
   uint private constant LINK_UNIT = 1e18;
 
   uint private unitsSupply; // Supply of units.
   uint private unitsRequested; // Amount of units requested for opening.
   uint private unitsMinted; // Boxed units.
+  uint private price; // Native currency needed to buy a lootbox.
   bool private isEmergencyMode; // State of emergency.
   EnumerableSet.UintSet private lootboxTypes; // Types of lootboxes.
   EnumerableSet.AddressSet private suppliers; // Supplier addresses being used.
@@ -214,6 +215,16 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @param amount The amount withdrawn
   event Withdraw(address token, address to, uint amount);
 
+  /// @notice Emitted when an admin sets purchase price
+  /// @param newPrice The amount of native currency to pay to buy a lootbox, or 0 if disabled
+  event PriceUpdated(uint newPrice);
+
+  /// @notice Emitted when user buys lootboxes
+  /// @param buyer The address of the user that purchased lootboxes
+  /// @param amount The amount of id 1 lootboxes sold
+  /// @param payment The amount of native currency user paid
+  event Sold(address buyer, uint amount, uint payment);
+
   /*//////////////////////////////////////////////////////////////
                                 ERRORS
   //////////////////////////////////////////////////////////////*/
@@ -254,7 +265,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @notice Only LINK could be sent with an ERC677 call
   error AcceptingOnlyLINK();
 
-  /// @notice Not enough pay for a VRF request
+  /// @notice Not enough pay for a VRF request or purchase
   error InsufficientPayment();
 
   /// @notice Not enough pay for a lootbox opening fee
@@ -311,6 +322,9 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @notice View function reverted without reason
   error ViewCallFailed();
 
+  /// @notice Purchase price is unexpectedly high or zero
+  error UnexpectedPrice(uint currentPrice);
+
   /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
   //////////////////////////////////////////////////////////////*/
@@ -318,16 +332,13 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @notice Deploys a new Lootbox contract with the given parameters.
   /// @param _link The ChainLink LINK token address.
   /// @param _vrfV2Wrapper The ChainLink VRFV2Wrapper contract address.
-  /// @param _linkEthFeed The CHainLink LINK-ETH feed address.
   /// @param _view The LootboxView contract address.
   constructor(
     address _link,
     address _vrfV2Wrapper,
-    address _linkEthFeed,
     address _view
   ) VRFV2WrapperConsumerBase(_link, _vrfV2Wrapper) ERC1155PresetMinterPauser('') {
     FACTORY = ILootboxFactory(payable(msg.sender));
-    LINK_ETH_FEED = AggregatorV3Interface(_linkEthFeed);
     VIEW = _view;
   }
 
@@ -365,7 +376,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @notice Adds loot suppliers.
   /// @param _suppliers An array of loot suppliers being added.
   function addSuppliers(address[] calldata _suppliers) external onlyAdmin() {
-    for (uint i = 0; i < _suppliers.length; ++i) {
+    for (uint i = 0; i < _suppliers.length; i = _inc(i)) {
       _addSupplier(_suppliers[i]);
     }
   }
@@ -373,7 +384,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @notice Removes contract suppliers.
   /// @param _suppliers An array of suppliers being removed.
   function removeSuppliers(address[] calldata _suppliers) external onlyAdmin() {
-    for (uint i = 0; i < _suppliers.length; ++i) {
+    for (uint i = 0; i < _suppliers.length; i = _inc(i)) {
       _removeSupplier(_suppliers[i]);
     }
   }
@@ -381,7 +392,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @notice Adds reward tokens for lootbox usage.
   /// @param _tokens An array of tokens being added.
   function addTokens(address[] calldata _tokens) external onlyAdmin() {
-    for (uint i = 0; i < _tokens.length; ++i) {
+    for (uint i = 0; i < _tokens.length; i = _inc(i)) {
       _addToken(_tokens[i]);
     }
   }
@@ -394,7 +405,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   function setAmountsPerUnit(address[] calldata _tokens, uint[] calldata _ids, uint[] calldata _amountsPerUnit) external notEmergency() onlyAdmin() {
     if (_tokens.length != _ids.length || _tokens.length != _amountsPerUnit.length) revert InvalidLength();
     uint currentSupply = unitsSupply;
-    for (uint i = 0; i < _tokens.length; ++i) {
+    for (uint i = 0; i < _tokens.length; i = _inc(i)) {
       currentSupply = _setAmountPerUnit(currentSupply, _tokens[i], _ids[i], _amountsPerUnit[i]);
     }
     if (currentSupply < unitsRequested) revert InsufficientSupply(currentSupply, unitsRequested);
@@ -411,7 +422,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
     }
     uint length = _ids.length;
     if (length != _amounts.length) revert InvalidLength();
-    for (uint i = 0; i < length; ++i) {
+    for (uint i = 0; i < length; i = _inc(i)) {
       _transferToken(_token, _type, _to, _ids[i], _amounts[i]);
     }
 
@@ -458,7 +469,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   ) public override notEmergency() returns (bytes4) {
     address token = _validateReceive(from);
     uint len = ids.length;
-    for (uint i = 0; i < len; ++i) {
+    for (uint i = 0; i < len; i = _inc(i)) {
       _supply1155(token, ids[i], values[i]);
     }
     return this.onERC1155BatchReceived.selector;
@@ -484,31 +495,6 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /*//////////////////////////////////////////////////////////////
                            OPEN FUNCTIONS
   //////////////////////////////////////////////////////////////*/
-
-  /// @notice Requests a lootbox openning paying with LINK.
-  /// @param _opener The payer who wants to open a lootbox.
-  /// @param _amount The max amount of LINK to pay.
-  /// @param _gasAndLoot List of lootboxes to open and a gas limit for allocation
-  ///                    ABI encoded as (uint32, uint[], uint[]), gas, ids, amounts.
-  // function onTokenTransfer(address _opener, uint _amount, bytes calldata _gasAndLoot) external notEmergency() override {
-    // revert Unsupported();
-  //   if (msg.sender != address(LINK)) revert AcceptingOnlyLINK();
-  //   (uint32 gas, uint[] memory lootIds, uint[] memory lootAmounts) =
-  //     abi.decode(_gasAndLoot, (uint32, uint[], uint[]));
-  //   uint vrfPrice = VRF_V2_WRAPPER.calculateRequestPrice(gas);
-  //   if (_amount < vrfPrice) revert InsufficientPayment();
-  //   _amount -= vrfPrice;
-  //   uint unitsToGet = _requestOpen(_opener, gas, lootIds, lootAmounts);
-  //   uint feePerUnit = FACTORY.feePerUnit(address(this));
-  //   uint feeInLink = feePerUnit * unitsToGet * LINK_UNIT / _getLinkPrice();
-  //   if (_amount < feeInLink) revert InsufficientFee();
-  //   if (feeInLink > 0) {
-  //     LINK.transferAndCall(address(FACTORY), feeInLink, '');
-  //   }
-  //   if (_amount > feeInLink) {
-  //     IERC20(address(LINK)).safeTransfer(_opener, _amount - feeInLink);
-  //   }
-  // }
 
   /// @notice Requests a lootbox openning paying with native currency
   /// @param _gas Gas limit for allocation
@@ -538,7 +524,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @param _opener The address of the user that has an allocation after opening.
   function claimRewards(address _opener) external whenNotPaused() {
     uint ids = allowedTokens.length();
-    for (uint i = 0; i < ids; ++i) {
+    for (uint i = 0; i < ids; i = _inc(i)) {
       address token = allowedTokens.at(i);
       AllocationInfo storage info = allocationInfo[_opener][token];
       RewardType rewardType = rewards[token].rewardType;
@@ -587,24 +573,38 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   }
 
   /*//////////////////////////////////////////////////////////////
-                          GETTER FUNCTIONS
+                           BUY FUNCTIONS
   //////////////////////////////////////////////////////////////*/
 
-  struct ExtraRewardInfo {
-    uint id;
-    uint units;
-    uint amountPerUnit;
-    uint balance;
+  /// @notice Sets the native currency price to buy a lootbox.
+  /// @notice Set to 0 to prevent sales.
+  /// @param _newPrice An amount of native currency user needs to pay to get a single lootbox.
+  function setPrice(uint _newPrice) external onlyAdmin() {
+    price = _newPrice;
+    emit PriceUpdated(_newPrice);
   }
 
-  struct RewardView {
-    address rewardToken;
-    RewardType rewardType;
-    uint units;
-    uint amountPerUnit;
-    uint balance;
-    ExtraRewardInfo[] extra;
+  /// @notice Mints requested amount of lootboxes for the caller assuming valid payment.
+  /// @notice Remainder is sent back to the caller.
+  /// @param _amount An amount lootboxes to mint.
+  /// @param _maxPrice A maximum price the caller is willing to pay per lootbox.
+  function buy(uint _amount, uint _maxPrice) external payable {
+    address payable sender = payable(_msgSender());
+    uint currentPrice = price;
+    if (currentPrice == 0 || currentPrice > _maxPrice) revert UnexpectedPrice(currentPrice);
+    uint valueNeeded = _amount * currentPrice;
+    if (msg.value < valueNeeded) revert InsufficientPayment();
+    _mint(sender, 1, _amount, '');
+    uint remainder = msg.value - valueNeeded;
+    if (remainder > 0) {
+      sender.sendValue(remainder);
+    }
+    emit Sold(sender, _amount, valueNeeded);
   }
+
+  /*//////////////////////////////////////////////////////////////
+                          GETTER FUNCTIONS
+  //////////////////////////////////////////////////////////////*/
 
   fallback(bytes calldata _data) external returns (bytes memory result) {
     bool success;
@@ -644,7 +644,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   function mintToMany(address[] calldata _tos, uint[] calldata _lootboxTypes, uint[] calldata _amounts) external onlyRole(MINTER_ROLE) {
     uint len = _tos.length;
     if (len != _lootboxTypes.length || len != _amounts.length) revert InvalidLength();
-    for (uint i = 0; i < len; ++i) {
+    for (uint i = 0; i < len; i = _inc(i)) {
       _mint(_tos[i], _lootboxTypes[i], _amounts[i], '');
     }
   }
@@ -758,10 +758,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @notice Gets LINK price.
   /// @return uint The link price from wei converted to uint.
   function _getLinkPrice() internal view returns (uint) {
-    int256 weiPerUnitLink;
-    (, weiPerUnitLink, , , ) = LINK_ETH_FEED.latestRoundData();
-    if (weiPerUnitLink <= 0) revert InvalidLinkPrice(weiPerUnitLink);
-    return uint(weiPerUnitLink);
+    return LootboxInterface(address(this)).getLinkPrice();
   }
 
   /// @notice Allows specific 1155 tokens to be used in the inventory.
@@ -860,7 +857,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
     _burnBatch(_opener, _lootIds, _lootAmounts);
     uint unitsToGet = 0;
     uint ids = _lootIds.length;
-    for (uint i = 0; i < ids; ++i) {
+    for (uint i = 0; i < ids; i = _inc(i)) {
       unitsToGet += _lootIds[i] * _lootAmounts[i];
     }
     if (unitsToGet == 0) revert ZeroAmount();
@@ -870,12 +867,11 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
     unitsRequested = unitsRequested + unitsToGet;
     uint256 requestId = _requestRandomness(_gas);
 
-    requests[requestId] = Request({
-      opener: _opener,
-      unitsToGet: unitsToGet.toUint96(),
-      lootIds: _lootIds,
-      lootAmounts: _lootAmounts
-    });
+    Request storage request = requests[requestId];
+    request.opener = _opener;
+    request.unitsToGet = unitsToGet.toUint96();
+    request.lootIds = _lootIds;
+    request.lootAmounts = _lootAmounts;
 
     openerRequests[_opener] = requestId;
 
@@ -900,6 +896,11 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
     emit RewardsClaimed(_claimer, _token, _id, _amount);
   }
 
+  // Meant to reduce bytecode size.
+  function _reduceRandom(bytes memory _input, uint _target) internal pure returns (uint) {
+    return uint(keccak256(_input)) % _target;
+  }
+
   /// @notice Picks the rewards using the given randomness as a seed.
   /// @param _requestId The amount of lootbox units the user is opening.
   /// @param _randomness The random number used to pick the rewards.
@@ -918,10 +919,10 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
     unitsRequested = unitsRequested - unitsToGet;
 
     for (; unitsToGet > 0; --unitsToGet) {
-      uint256 target = uint256(keccak256(abi.encodePacked(_randomness, unitsToGet))) % totalUnits;
+      uint256 target = _reduceRandom(abi.encodePacked(_randomness, unitsToGet), totalUnits);
       uint256 offset = 0;
 
-      for (uint256 j = 0;; ++j) {
+      for (uint256 j = 0;; j = _inc(j)) {
         address token = inventory.at(j);
         AllocationInfo storage openerInfo = allocationInfo[opener][token];
         Reward storage reward = rewards[token];
@@ -942,8 +943,8 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
           }
           else if (rewardType == RewardType.ERC721 || rewardType == RewardType.ERC1155NFT) {
             uint ids = reward.ids.length();
-            for (uint k = 0; k < amount; ++k) {
-              target = uint256(keccak256(abi.encodePacked(_randomness, unitsToGet, k))) % ids;
+            for (uint k = 0; k < amount; k = _inc(k)) {
+              target = _reduceRandom(abi.encodePacked(_randomness, unitsToGet, k), ids);
               uint tokenId = reward.ids.at(target);
               reward.ids.remove(tokenId);
               --ids;
@@ -955,7 +956,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
             // Reusing variables before inevitable break of the loop.
             target = target - offset;
             offset = 0;
-            for (uint k = 0;; ++k) {
+            for (uint k = 0;; k = _inc(k)) {
               uint id = reward.ids.at(k);
               RewardInfo extraInfo = reward.extraInfo[id];
               unitsOfToken = units(extraInfo);
@@ -1059,10 +1060,17 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   }
 
   /// @notice Returns value bool.
+  /// @dev Meant to improve readability over the ! operator.
   /// @param _value Boolean value.
   /// @return bool Opposite bool value.
   function _not(bool _value) internal pure returns (bool) {
     return !_value;
+  }
+
+  function _inc(uint i) internal pure returns (uint) {
+    unchecked {
+      return i + 1;
+    }
   }
 
   /// @dev Inspired by OZ implementation.
@@ -1114,7 +1122,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
     if (from == address(0)) {
       uint unitBoxesAdded = 0;
       uint len = ids.length;
-      for (uint i = 0; i < len; ++i) {
+      for (uint i = 0; i < len; i = _inc(i)) {
         uint id = ids[i];
         if (id == 0 || id > type(uint8).max) revert InvalidLootboxType();
         lootboxTypes.add(id);
@@ -1125,7 +1133,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
     if (to == address(0)) {
       uint unitBoxesRemoved = 0;
       uint len = ids.length;
-      for (uint i = 0; i < len; ++i) {
+      for (uint i = 0; i < len; i = _inc(i)) {
         unitBoxesRemoved = unitBoxesRemoved + (ids[i] * amounts[i]);
       }
       unitsMinted = unitsMinted - unitBoxesRemoved;

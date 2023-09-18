@@ -83,8 +83,7 @@ contract LootboxFactory is ILootboxFactory, ERC677ReceiverInterface, Ownable {
     LINK = _link;
     VRFV2WRAPPER = _vrfV2Wrapper;
     VIEW = address(new LootboxView(_link, VRFV2WRAPPER));
-    address feed = address(IVRFV2Wrapper(_vrfV2Wrapper).LINK_ETH_FEED());
-    LOOTBOX = address(new Lootbox(_link, _vrfV2Wrapper, feed, VIEW));
+    LOOTBOX = address(new Lootbox(_link, _vrfV2Wrapper, VIEW));
   }
 
   /*//////////////////////////////////////////////////////////////

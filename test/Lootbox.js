@@ -3412,30 +3412,49 @@ describe('Lootbox', function () {
       .to.be.revertedWithCustomError(lootbox, 'ViewCallFailed');
   });
 
-  // describe.skip('LINK payment', function() {
-  //   it.skip('should allow LINK as ERC677 transfer and call to create an open request', async function () {});
-  //   it.skip('should restrict other tokens as ERC677 transfer and call', async function () {});
-  //   it.skip('should restrict to create an open request with LINK payment less than VRF price', async function () {});
-  //   it.skip('should restrict to create an open request with LINK payment less than VRF price plus LINK factory fee', async function () {});
-  //   it.skip('should forward the open fee in LINK to the factory when creating an open request', async function () {});
-  //   it.skip('should not forward a zero fee in LINK to the factory when creating an open request', async function () {});
-  //   it.skip('should return the excess LINK to the opener when creating an open request', async function () {});
-
-  //   it.skip('should restrict more then one pending open request per opener', async function () {});
-  //   it.skip('should restrict open request with less than 100,000 gas for VRF request', async function () {});
-  //   it.skip('should restrict open request when paused', async function () {});
-  //   it.skip('should restrict open with zero total units', async function () {});
-  //   it.skip('should restrict open with total units less than supply', async function () {});
-  //   it.skip('should burn boxes specified in open request', async function () {});
-
-  //   it.skip('should allocate ERC20 rewards', async function () {});
-  //   it.skip('should allocate ERC721 rewards', async function () {});
-  //   it.skip('should allocate ERC1155 rewards', async function () {});
-  //   it.skip('should allocate ERC1155 NFT rewards', async function () {});
-  //   it.skip('should allocate all rewards', async function () {});
-  //   it.skip('should move remainder of ERC721 rewards to leftovers', async function () {});
-  //   it.skip('should move remainder of ERC1155 NFT rewards to leftovers', async function () {});
-  // });
+  it('should allow buying lootboxes', async function () {
+    const { lootbox } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await expect(lootbox.connect(user).buy(1, 100, {value: 100}))
+      .to.be.revertedWithCustomError(lootbox, 'UnexpectedPrice')
+      .withArgs(0);
+    await expect(lootbox.setPrice(30))
+      .to.emit(lootbox, 'PriceUpdated')
+      .withArgs(30);
+    await expect(lootbox.connect(user).buy(1, 29, {value: 29}))
+      .to.be.revertedWithCustomError(lootbox, 'UnexpectedPrice')
+      .withArgs(30);
+    await expect(lootbox.connect(user).buy(1, 30, {value: 29}))
+      .to.be.revertedWithCustomError(lootbox, 'InsufficientPayment');
+    await expect(lootbox.connect(user).buy(2, 30, {value: 59}))
+      .to.be.revertedWithCustomError(lootbox, 'InsufficientPayment');
+    await expect(lootbox.connect(user).buy(2, 30, {value: 0}))
+      .to.be.revertedWithCustomError(lootbox, 'InsufficientPayment');
+    await expect(lootbox.setPrice(0))
+      .to.emit(lootbox, 'PriceUpdated')
+      .withArgs(0);
+    await expect(lootbox.connect(user).buy(2, 30, {value: 60}))
+      .to.be.revertedWithCustomError(lootbox, 'UnexpectedPrice')
+      .withArgs(0);
+    await expect(lootbox.setPrice(50))
+      .to.emit(lootbox, 'PriceUpdated')
+      .withArgs(50);
+    await expect(lootbox.connect(user).buy(0, 30, {value: 60}))
+      .to.be.reverted;
+    let tx = lootbox.connect(user).buy(2, 50, {value: 100});
+    await expect(tx)
+      .to.emit(lootbox, 'Sold')
+      .withArgs(user.address, 2, 100);
+    await expect(tx).to.changeEtherBalance(lootbox.address, 100);
+    expect(await lootbox.balanceOf(user.address, 1)).to.equal(2);
+    tx = lootbox.connect(user).buy(3, 50, {value: 170});
+    await expect(tx)
+      .to.emit(lootbox, 'Sold')
+      .withArgs(user.address, 3, 150);
+    expect(await lootbox.balanceOf(user.address, 1)).to.equal(5);
+    await expect(tx).to.changeEtherBalance(user.address, -150);
+    await expect(tx).to.changeEtherBalance(lootbox.address, 150);
+  });
 
   describe('Native currency payment', function() {
     it('should allow native currency payment to create an open request', async function () {

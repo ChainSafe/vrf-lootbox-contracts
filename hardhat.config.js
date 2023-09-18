@@ -214,6 +214,34 @@ task('set-amountperunit', 'Set amount per unit of reward for a reward token')
   console.log(`Amount per unit updates. Old supply: ${oldSupply} new supply: ${newSupply}`);
 });
 
+task('set-price', 'Set the native currency price to buy a lootbox')
+.addOptionalParam('factory', 'LootboxFactory address')
+.addOptionalParam('id', 'Lootbox id for contract address predictability', 0, types.int)
+.addOptionalParam('price', 'An amount of native currency user needs to pay to get a single lootbox', '0.0001')
+.setAction(async ({ factory, id, price }) => {
+  assert(network.name == 'localhost', 'Only for testing');
+  const { chainId } = network.config;
+  assert(chainId, 'Missing network configuration!');
+
+  const [deployer, supplier] = await ethers.getSigners();
+
+  const predictedAddress = ethers.utils.getContractAddress({
+    from: deployer.address,
+    nonce: 0,
+  });
+  factory = factory || predictedAddress;
+
+  const lootboxFactory = await ethers.getContractAt('LootboxFactory', factory);
+  const lootboxAddress = await lootboxFactory.getLootbox(deployer.address, id);
+  const lootbox = await ethers.getContractAt('LootboxInterface', lootboxAddress);
+
+  const oldPrice = ethers.utils.formatUnits(await lootbox.getPrice());
+  const parsedPrice = ethers.utils.parseUnits(price);
+  await (await lootbox.connect(deployer).setPrice(parsedPrice)).wait();
+
+  console.log(`Price set. Old price: ${oldPrice} new price: ${price}`);
+});
+
 task('mint', 'Mint lootboxes')
 .addOptionalParam('factory', 'LootboxFactory address')
 .addOptionalParam('id', 'Lootbox id for contract address predictability', 0, types.int)
@@ -325,6 +353,7 @@ task('devsetup', 'Do everything')
   await hre.run('set-amountperunit', { type: 'ERC20', amountperunit: 30 });
   await hre.run('set-amountperunit', { type: 'ERC1155', tokenid: 3, amountperunit: 35 });
   await hre.run('set-amountperunit', { type: 'ERC1155', tokenid: 4, amountperunit: 50 });
+  await hre.run('set-price');
   await hre.run('mint');
   await hre.run('inventory');
 });

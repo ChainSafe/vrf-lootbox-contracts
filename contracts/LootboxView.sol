@@ -83,6 +83,7 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155PresetMinterPauser {
   uint public unitsSupply; // Supply of units.
   uint public unitsRequested; // Amount of units requested for opening.
   uint public unitsMinted; // Boxed units.
+  uint private price; // Native currency needed to buy a lootbox.
   bool public isEmergencyMode; // State of emergency.
   EnumerableSet.UintSet private lootboxTypes; // Types of lootboxes.
   EnumerableSet.AddressSet private suppliers; // Supplier addresses being used.
@@ -129,6 +130,15 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155PresetMinterPauser {
     LINK_ETH_FEED = IVRFV2Wrapper(_vrfV2Wrapper).LINK_ETH_FEED();
     VRF_V2_WRAPPER = VRFV2WrapperInterface(_vrfV2Wrapper);
     LINK = _link;
+  }
+
+  /*//////////////////////////////////////////////////////////////
+                           BUY FUNCTIONS
+  //////////////////////////////////////////////////////////////*/
+
+  /// @notice Gets the native currency price to buy a lootbox.
+  function getPrice() external view returns(uint) {
+    return price;
   }
 
   /*//////////////////////////////////////////////////////////////
@@ -360,6 +370,10 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155PresetMinterPauser {
   /// @return address The address of the VRF wrapper.
   function getVRFV2Wrapper() external view returns (address) {
     return address(VRF_V2_WRAPPER);
+  }
+
+  function getLinkPrice() external view returns (uint) {
+    return _getLinkPrice();
   }
 
   /// @notice Checks the balance of an erc20 token.
