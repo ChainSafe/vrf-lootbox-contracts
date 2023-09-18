@@ -40,7 +40,36 @@ import {IVRFV2Wrapper, AggregatorV3Interface} from './interfaces/IVRFV2Wrapper.s
 /// @title Lootbox
 /// @author ChainSafe Systems: Oleksii (Functionality) Sneakz (Natspec assistance)
 /// @notice This contract holds lootbox functions used in Chainsafe's SDK, Documentation can be found here: https://docs.gaming.chainsafe.io/current/lootboxes
-/// @dev Contract allows users to open a lootbox and receive a random reward. All function calls are tested and have been implemented in ChainSafe's SDK
+/// @notice Glossary:
+/// @notice   Reward is a token that could be received by opening a lootbox.
+/// @notice   Unit is a common, across all rewards, denomination of what user receives by openning a lootbox with Type/ID 1.
+/// @notice   Lootbox Type/ID is a property of a lootbox that defines how many units will be received by opening this lootbox,
+/// @notice     eg. opening a lootbox with Type/ID 3 will produce 3 random units of rewards.
+/// @notice   Amount per unit is a property of a reward that defines how many tokens of this reward will be received for single unit,
+/// @notice     eg. opening a lootbox with Type/ID 1 that ended up being a TOKEN_X of type ERC20 would produce 30 TOKEN_X for the user,
+/// @notice     or if it ended up being a TOKEN_Y of type ERC721 would produce 2 TOKEN_Y NFTs for the user,
+/// @notice     or if it ended up being a TOKEN_Z of type ERC1155 would produce 20 TOKEN_Y ID 5, or 50 TOKEN_Y ID 10 for the user.
+/// @notice   Reward Type is self describing with one caveat. The ERC1155NFT type is an ERC1155 where each ID could have a balance of only 1.
+/// @notice   Which technically makes it behave just like ERC721, ie. an NFT. Contrary to ERC1155 where each ID could have arbitrary balances, i.e fungible.
+/// @notice   Supplier is an address that is allowed to send rewards into the inventory.
+/// @notice   Inventory is a pool of rewards that could be claimed by opening lootboxes.
+/// @notice   Rewards adding process:
+/// @notice   1. Add tokens list to be allowed for rewards.
+/// @notice   2. Add suppliers that hold desired reward tokens.
+/// @notice   3. Make suppliers transfer reward tokens to the Lootbox address:
+/// @notice     For ERC20, simple transfer(lootbox, amount).
+/// @notice     For ERC721, safeTransferFrom(from, lootbox, tokenId, '0x').
+/// @notice     For ERC1155, safeTransferFrom(from, lootbox, tokenId, amountOfTokenId, '0x') or
+/// @notice       safeBatchTransferFrom(from, lootbox, tokenIds[], amountsOfTokenIds[], '0x').
+/// @notice     For ERC1155NFT, same as for ERC1155, but amounts should be strictly 1. Note that ERC1155 initially transferred with amount 1,
+/// @notice       will be recognized as ERC1155NFT and won't be able to have amounts above 1 in the future.
+/// @notice   4. Set amount per unit for supplied reward tokens:
+/// @notice     For ERC20, id is not used, only amount does. Eg. 100 means that a single unit could be converted into 100 tokens.
+/// @notice     For ERC721, id is not used, only amount does. Eg. 3 means that a single unit could be converted into 3 different NFT ids.
+/// @notice     For ERC1155, id used to specify which particular internal token id is configured with the amount.
+/// @notice       Eg. id 5 and amount 30 means that a single unit could be converted into 30 tokens of internal token id 5.
+/// @notice     For ERC1155NFT, id is not used, only amount does. Eg. 2 means that a single unit could be converted into 2 different internal token ids.
+/// @dev Contract allows users to open a lootbox and receive a random reward. All function calls are tested and have been implemented in ChainSafe's SDK.
 
 type RewardInfo is uint248; // 8 bytes unitsAvailable | 23 bytes amountPerUnit
 uint constant UNITS_OFFSET = 8 * 23;
@@ -349,7 +378,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
     }
   }
 
-  /// @notice Adds tokens for lootbox usage.
+  /// @notice Adds reward tokens for lootbox usage.
   /// @param _tokens An array of tokens being added.
   function addTokens(address[] calldata _tokens) external onlyAdmin() {
     for (uint i = 0; i < _tokens.length; ++i) {

@@ -226,21 +226,22 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155PresetMinterPauser {
     for (uint i = 0; i < tokens; ++i) {
       address token = inventory.at(i);
       result[i].rewardToken = token;
-      RewardType rewardType = rewards[token].rewardType;
+      Reward storage reward = rewards[token];
+      RewardType rewardType = reward.rewardType;
       result[i].rewardType = rewardType;
-      result[i].units = units(rewards[token].rewardInfo);
-      result[i].amountPerUnit = amountPerUnit(rewards[token].rewardInfo);
+      result[i].units = units(reward.rewardInfo);
+      result[i].amountPerUnit = amountPerUnit(reward.rewardInfo);
       if (rewardType == RewardType.ERC20) {
         result[i].balance = result[i].units * result[i].amountPerUnit;
       }
-      uint ids = rewards[token].ids.length();
+      uint ids = reward.ids.length();
       result[i].extra = new ExtraRewardInfo[](ids);
       for (uint j = 0; j < ids; ++j) {
-        uint id = rewards[token].ids.at(j);
+        uint id = reward.ids.at(j);
         result[i].extra[j].id = id;
         if (rewardType == RewardType.ERC1155) {
-          result[i].extra[j].units = units(rewards[token].extraInfo[id]);
-          result[i].extra[j].amountPerUnit = amountPerUnit(rewards[token].extraInfo[id]);
+          result[i].extra[j].units = units(reward.extraInfo[id]);
+          result[i].extra[j].amountPerUnit = amountPerUnit(reward.extraInfo[id]);
           result[i].extra[j].balance = result[i].extra[j].units * result[i].extra[j].amountPerUnit;
         }
       }
@@ -255,13 +256,14 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155PresetMinterPauser {
     for (uint i = 0; i < tokens; ++i) {
       address token = allowedTokens.at(i);
       leftoversResult[k].rewardToken = token;
-      RewardType rewardType = rewards[token].rewardType;
+      Reward storage reward = rewards[token];
+      RewardType rewardType = reward.rewardType;
       leftoversResult[k].rewardType = rewardType;
-      leftoversResult[k].amountPerUnit = amountPerUnit(rewards[token].rewardInfo);
+      leftoversResult[k].amountPerUnit = amountPerUnit(reward.rewardInfo);
       if (rewardType == RewardType.ERC20 || rewardType == RewardType.UNSET) {
         leftoversResult[k].balance =
           tryBalanceOfThis(token) - allocated[token][0]
-          - (units(rewards[token].rewardInfo) * leftoversResult[k].amountPerUnit);
+          - (units(reward.rewardInfo) * leftoversResult[k].amountPerUnit);
         if (leftoversResult[k].balance > 0) {
           ++k;
         }
@@ -271,7 +273,7 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155PresetMinterPauser {
         if (inventory.contains(token)) {
           continue;
         }
-        EnumerableSet.UintSet storage tokenIds = rewards[token].ids;
+        EnumerableSet.UintSet storage tokenIds = reward.ids;
         uint ids = tokenIds.length();
         if (ids == 0) {
           continue;
@@ -288,9 +290,9 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155PresetMinterPauser {
         for (uint j = 0; j < extraTokenIds.length(); ++j) {
           uint id = extraTokenIds.at(j);
           extra[l].id = id;
-          extra[l].amountPerUnit = amountPerUnit(rewards[token].extraInfo[id]);
+          extra[l].amountPerUnit = amountPerUnit(reward.extraInfo[id]);
           extra[l].balance = IERC1155(token).balanceOf(address(this), id) - allocated[token][id]
-            - (units(rewards[token].extraInfo[id]) * extra[l].amountPerUnit);
+            - (units(reward.extraInfo[id]) * extra[l].amountPerUnit);
           if (extra[l].balance == 0) {
             continue;
           }
