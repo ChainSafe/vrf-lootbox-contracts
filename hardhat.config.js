@@ -354,7 +354,11 @@ task('devsetup', 'Do everything')
   await hre.run('set-amountperunit', { type: 'ERC1155', tokenid: 3, amountperunit: 35 });
   await hre.run('set-amountperunit', { type: 'ERC1155', tokenid: 4, amountperunit: 50 });
   await hre.run('set-price');
-  await hre.run('mint');
+  await hre.run('mint', { tokenid: 1, amount: 5 });
+  await hre.run('mint', { tokenid: 2, amount: 4 });
+  await hre.run('mint', { tokenid: 3, amount: 3 });
+  await hre.run('mint', { tokenid: 4, amount: 2 });
+  await hre.run('mint', { tokenid: 5, amount: 1 });
   await hre.run('inventory');
 });
 
