@@ -299,9 +299,9 @@ task('fulfill', 'Fulfill an open request to allocate rewards')
   const requestId = await lootbox.openerRequests(userAddr);
   assert(requestId.gt('0'), `Open request not found for user ${userAddr}`);
 
-  await setBalance(vrfV2Wrapper, ethers.utils.parseUnits('10'));
   const vrfW2WrapperInstance = await ethers.getContractAt('IVRFV2Wrapper', vrfV2Wrapper);
   const vrfV2Coordinator = await vrfW2WrapperInstance.COORDINATOR();
+  await setBalance(vrfV2Coordinator, ethers.utils.parseUnits('10'));
   const impersonatedVRFCoordinator = await ethers.getImpersonatedSigner(vrfV2Coordinator);
   const randomWord = ethers.BigNumber.from(ethers.utils.randomBytes(32));
   await (await vrfW2WrapperInstance.connect(impersonatedVRFCoordinator)
