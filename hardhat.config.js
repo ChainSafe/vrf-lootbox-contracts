@@ -277,7 +277,6 @@ task('fulfill', 'Fulfill an open request to allocate rewards')
 .addOptionalParam('factory', 'LootboxFactory address')
 .addOptionalParam('id', 'Lootbox id for contract address predictability', 0, types.int)
 .addOptionalParam('user', 'User address that requested to open something')
-.addOptionalParam('gas', 'Fulfillment gas limit', 2500000, types.int)
 .setAction(async ({ factory, id, user: userAddr, gas }) => {
   assert(network.name == 'localhost', 'Only for testing');
   const { chainId } = network.config;
@@ -301,13 +300,15 @@ task('fulfill', 'Fulfill an open request to allocate rewards')
   assert(requestId.gt('0'), `Open request not found for user ${userAddr}`);
 
   await setBalance(vrfV2Wrapper, ethers.utils.parseUnits('10'));
-  const impersonatedVRFWrapper = await ethers.getImpersonatedSigner(vrfV2Wrapper);
+  const vrfW2WrapperInstance = await ethers.getContractAt('IVRFV2Wrapper', vrfV2Wrapper);
+  const vrfV2Coordinator = await vrfW2WrapperInstance.COORDINATOR();
+  const impersonatedVRFCoordinator = await ethers.getImpersonatedSigner(vrfV2Coordinator);
   const randomWord = ethers.BigNumber.from(ethers.utils.randomBytes(32));
-  await (await lootbox.connect(impersonatedVRFWrapper)
-    .rawFulfillRandomWords(requestId, [randomWord], { gasLimit: gas })).wait();
+  await (await vrfW2WrapperInstance.connect(impersonatedVRFCoordinator)
+    .rawFulfillRandomWords(requestId, [randomWord], { gasLimit: 10_000_000 })).wait();
 
   const requestIdAfter = await lootbox.openerRequests(userAddr);
-  assert(requestId.eq('0'), `Randomness fulfillment ran out of gas`);
+  assert(requestIdAfter.eq('0'), `Randomness fulfillment ran out of gas, do recoverBoxes(opener)`);
 
   console.log(`Randomness fulfilled successfully`);
 });
