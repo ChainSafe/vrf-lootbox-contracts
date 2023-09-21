@@ -363,6 +363,56 @@ task('devsetup', 'Do everything')
   await hre.run('inventory');
 });
 
+task('deploy-test-tokens', 'Deploys test reward tokens, send them to the specified supplier address')
+.addParam('supplier', 'Supplier address')
+.addOptionalParam('verify', 'Verify the deployed factory', 'false', types.bool)
+.setAction(async ({ supplier, verify }) => {
+  const { chainId } = network.config;
+  assert(chainId, 'Missing network configuration!');
+
+  const [deployer] = await ethers.getSigners();
+
+  const erc20 = await deploy('TestnetERC20', deployer, 100000, supplier);
+  const erc721 = await deploy('TestnetERC721', deployer, 20, supplier);
+  const erc1155 = await deploy('TestnetERC1155', deployer, 10, 1000, supplier);
+  const erc1155NFT = await deploy('TestnetERC1155NFT', deployer, 15, supplier);
+
+  if (verify === 'true') {
+    console.log('Waiting half a minute to start verification');
+    await sleep(30000);
+    await hre.run('verify:verify', {
+      address: erc20.address,
+      constructorArguments: [100000, supplier],
+      contract: 'contracts/testing/Mocks.sol:TestnetERC20',
+    });
+    await sleep(3000);
+    await hre.run('verify:verify', {
+      address: erc721.address,
+      constructorArguments: [20, supplier],
+      contract: 'contracts/testing/Mocks.sol:TestnetERC721',
+    });
+    await sleep(3000);
+    await hre.run('verify:verify', {
+      address: erc1155.address,
+      constructorArguments: [10, 1000, supplier],
+      contract: 'contracts/testing/Mocks.sol:TestnetERC1155',
+    });
+    await sleep(3000);
+    await hre.run('verify:verify', {
+      address: erc1155NFT.address,
+      constructorArguments: [15, supplier],
+      contract: 'contracts/testing/Mocks.sol:TestnetERC1155NFT',
+    });
+  }
+
+  console.log('Test tokens:');
+  console.log(`ERC20: ${erc20.address}`);
+  console.log(`ERC721: ${erc721.address}`);
+  console.log(`ERC1155: ${erc1155.address}`);
+  console.log(`ERC1155NFT: ${erc1155NFT.address}`);
+  console.log(`You can now use those tokens on ${supplier} wallet to test lootboxes.`);
+});
+
 module.exports = {
   solidity: {
     version: '0.8.20',
