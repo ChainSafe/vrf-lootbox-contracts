@@ -110,7 +110,7 @@ task('deploy-lootbox', 'Deploys an ERC1155 Lootbox through a factory along with 
   await (await lootbox.addSuppliers([supplier.address])).wait();
   console.log(`Supplier ${supplier.address} added to the lootbox contract.`);
 
-  const erc20 = await deploy('MockERC20', supplier, 100000);
+  const erc20 = await deploy('MockERC20', supplier, 100000n * 10n^18n);
   const erc721 = await deploy('MockERC721', supplier, 20);
   const erc1155 = await deploy('MockERC1155', supplier, 10, 1000);
   const erc1155NFT = await deploy('MockERC1155NFT', supplier, 15);
@@ -350,7 +350,7 @@ task('devsetup', 'Do everything')
   await hre.run('supply-rewards', { type: 'ERC1155', tokenid: 4, amount: 150 });
   await hre.run('supply-rewards', { type: 'ERC1155NFT', tokenid: 2 });
   await hre.run('supply-rewards', { type: 'ERC1155NFT', tokenid: 6 });
-  await hre.run('supply-rewards', { type: 'ERC20', amount: 1000 });
+  await hre.run('supply-rewards', { type: 'ERC20', amount: 1000n * 10n^18n });
   await hre.run('set-amountperunit', { type: 'ERC20', amountperunit: 30 });
   await hre.run('set-amountperunit', { type: 'ERC1155', tokenid: 3, amountperunit: 35 });
   await hre.run('set-amountperunit', { type: 'ERC1155', tokenid: 4, amountperunit: 50 });
@@ -372,7 +372,7 @@ task('deploy-test-tokens', 'Deploys test reward tokens, send them to the specifi
 
   const [deployer] = await ethers.getSigners();
 
-  const erc20 = await deploy('TestnetERC20', deployer, 100000, supplier);
+  const erc20 = await deploy('TestnetERC20', deployer, 10000n * 10n^18n, supplier);
   const erc721 = await deploy('TestnetERC721', deployer, 20, supplier);
   const erc1155 = await deploy('TestnetERC1155', deployer, 10, 1000, supplier);
   const erc1155NFT = await deploy('TestnetERC1155NFT', deployer, 15, supplier);
@@ -382,7 +382,7 @@ task('deploy-test-tokens', 'Deploys test reward tokens, send them to the specifi
     await sleep(30000);
     await hre.run('verify:verify', {
       address: erc20.address,
-      constructorArguments: [100000, supplier],
+      constructorArguments: [10000n * 10n^18n, supplier],
       contract: 'contracts/testing/Mocks.sol:TestnetERC20',
     });
     await sleep(3000);
