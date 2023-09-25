@@ -129,8 +129,9 @@ task('supply-rewards', 'Transfer rewards to the previously deployed lootbox cont
 .addOptionalParam('id', 'Lootbox id for contract address predictability', 0, types.int)
 .addOptionalParam('type', 'Reward token type, ERC20, ERC721, ERC1155 or ERC1155NFT', 'ERC721')
 .addOptionalParam('tokenid', 'Reward token id, not needed for ERC20', 0, types.int)
-.addOptionalParam('amount', 'Reward token amount, not needed for ERC721 and ERC1155NFT', 1, types.int)
+.addOptionalParam('amount', 'Reward token amount, not needed for ERC721 and ERC1155NFT', '1')
 .setAction(async ({ factory, id, type, tokenid, amount }) => {
+  amount = BigInt(amount);
   assert(network.name == 'localhost', 'Only for testing');
   const { chainId } = network.config;
   assert(chainId, 'Missing network configuration!');
@@ -172,8 +173,9 @@ task('set-amountperunit', 'Set amount per unit of reward for a reward token')
 .addOptionalParam('id', 'Lootbox id for contract address predictability', 0, types.int)
 .addOptionalParam('type', 'Reward token type, ERC20, ERC721, ERC1155 or ERC1155NFT', 'ERC721')
 .addOptionalParam('tokenid', 'Reward token id, not needed for ERC20', 0, types.int)
-.addOptionalParam('amountperunit', 'Reward token amount per reward unit', 1, types.int)
+.addOptionalParam('amountperunit', 'Reward token amount per reward unit', '1')
 .setAction(async ({ factory, id, type, tokenid, amountperunit }) => {
+  amountperunit = BigInt(amountperunit);
   assert(network.name == 'localhost', 'Only for testing');
   const { chainId } = network.config;
   assert(chainId, 'Missing network configuration!');
@@ -345,15 +347,15 @@ task('devsetup', 'Do everything')
   await hre.run('supply-rewards', { tokenid: 5 });
   await hre.run('supply-rewards', { tokenid: 1 });
   await hre.run('supply-rewards', { tokenid: 9 });
-  await hre.run('supply-rewards', { type: 'ERC1155', tokenid: 3, amount: 50 });
-  await hre.run('supply-rewards', { type: 'ERC1155', tokenid: 3, amount: 70 });
-  await hre.run('supply-rewards', { type: 'ERC1155', tokenid: 4, amount: 150 });
+  await hre.run('supply-rewards', { type: 'ERC1155', tokenid: 3, amount: '50' });
+  await hre.run('supply-rewards', { type: 'ERC1155', tokenid: 3, amount: '70' });
+  await hre.run('supply-rewards', { type: 'ERC1155', tokenid: 4, amount: '150' });
   await hre.run('supply-rewards', { type: 'ERC1155NFT', tokenid: 2 });
   await hre.run('supply-rewards', { type: 'ERC1155NFT', tokenid: 6 });
-  await hre.run('supply-rewards', { type: 'ERC20', amount: 1000n * 10n**18n });
-  await hre.run('set-amountperunit', { type: 'ERC20', amountperunit: 30 });
-  await hre.run('set-amountperunit', { type: 'ERC1155', tokenid: 3, amountperunit: 35 });
-  await hre.run('set-amountperunit', { type: 'ERC1155', tokenid: 4, amountperunit: 50 });
+  await hre.run('supply-rewards', { type: 'ERC20', amount: (1000n * 10n**18n).toString() });
+  await hre.run('set-amountperunit', { type: 'ERC20', amountperunit: (30n * 10n**18n).toString() });
+  await hre.run('set-amountperunit', { type: 'ERC1155', tokenid: 3, amountperunit: '35' });
+  await hre.run('set-amountperunit', { type: 'ERC1155', tokenid: 4, amountperunit: '50' });
   await hre.run('set-price');
   await hre.run('mint', { tokenid: 1, amount: 5 });
   await hre.run('mint', { tokenid: 2, amount: 4 });
