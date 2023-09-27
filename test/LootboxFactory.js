@@ -1,4 +1,4 @@
-const { loadFixture } = require('@nomicfoundation/hardhat-network-helpers');
+const { loadFixture, setCode } = require('@nomicfoundation/hardhat-network-helpers');
 const { anyValue } = require('@nomicfoundation/hardhat-chai-matchers/withArgs');
 const { expect } = require('chai');
 const { linkToken, vrfV2Wrapper, linkHolder } = require('../network.config.js')['31337'];
@@ -34,6 +34,7 @@ describe('LootboxFactory', function () {
     expect(await factory.feePerDeploy()).to.equal(0);
     expect(await factory.defaultFeePerUnit()).to.equal(0);
     const [someone, another] = await ethers.getSigners();
+    await setCode(another.address, await ethers.provider.getCode(vrfV2Wrapper));
     const { factory: factory2 } = await deployFactory(someone.address, another.address);
     expect(await factory2.LINK()).to.equal(someone.address);
     expect(await factory2.VRFV2WRAPPER()).to.equal(another.address);
@@ -274,7 +275,7 @@ describe('LootboxFactory', function () {
     const [owner] = await ethers.getSigners();
     await factory.deployLootbox('someUri', 0);
     const deployedLootbox = await factory.getLootbox(owner.address, 0);
-    const lootbox = await ethers.getContractAt('Lootbox', deployedLootbox);
+    const lootbox = await ethers.getContractAt('LootboxInterface', deployedLootbox);
     const adminRole = await lootbox.DEFAULT_ADMIN_ROLE();
     expect(await lootbox.uri(0)).to.equal('someUri');
     expect(await lootbox.hasRole(adminRole, owner.address)).to.be.true;

@@ -34,3 +34,33 @@ contract MockERC1155NFT is ERC1155 {
     }
   }
 }
+
+contract TestnetERC20 is ERC20 {
+  constructor(uint _supply, address _holder) ERC20('TestnetERC20', 'ERC20') {
+    _mint(_holder, _supply);
+  }
+}
+
+contract TestnetERC721 is ERC721 {
+  constructor(uint _supply, address _holder) ERC721('TestnetERC721', 'ERC721') {
+    for (uint i = 0; i < _supply; ++i) {
+      _mint(_holder, i);
+    }
+  }
+}
+
+contract TestnetERC1155 is ERC1155 {
+  constructor(uint _tokens, uint _supply, address _holder) ERC1155('https://bafybeicxxp4o5vxpesym2cvg4cqmxnwhwgpqawhhvxttrz2dlpxjyiob64.ipfs.nftstorage.link/{id}') {
+    for (uint i = 0; i < _tokens; ++i) {
+      _mint(_holder, i, _supply, '');
+    }
+  }
+}
+
+contract TestnetERC1155NFT is ERC1155 {
+  constructor(uint _supply, address _holder) ERC1155('https://bafybeicxxp4o5vxpesym2cvg4cqmxnwhwgpqawhhvxttrz2dlpxjyiob64.ipfs.nftstorage.link/{id}') {
+    for (uint i = 0; i < _supply; ++i) {
+      _mint(_holder, i, 1, '');
+    }
+  }
+}
