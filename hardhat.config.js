@@ -415,6 +415,51 @@ task('deploy-test-tokens', 'Deploys test reward tokens, send them to the specifi
   console.log(`You can now use those tokens on ${supplier} wallet to test lootboxes.`);
 });
 
+task('supply-test-rewards', 'Transfer test rewards to the previously deployed lootbox contract')
+.addParam('token', 'Address of the test reward token contract')
+.addParam('factory', 'LootboxFactory address')
+.addOptionalParam('deployer', 'Wallet address that deployed the lootbox')
+.addOptionalParam('id', 'Lootbox id for contract address predictability', 0, types.int)
+.addOptionalParam('type', 'Reward token type, ERC20, ERC721, ERC1155 or ERC1155NFT', 'ERC721')
+.addOptionalParam('tokenid', 'Reward token id, not needed for ERC20', 0, types.int)
+.addOptionalParam('amount', 'Reward token amount, not needed for ERC721 and ERC1155NFT', '1')
+.setAction(async ({ factory, deployer: deployerAddress, id, type, token, tokenid, amount }) => {
+  amount = BigInt(amount);
+  const { chainId } = network.config;
+  assert(chainId, 'Missing network configuration!');
+
+  const [supplier] = await ethers.getSigners();
+  deployerAddress = deployerAddress || supplier.address;
+
+  const erc20 = await ethers.getContractAt('MockERC20', token);
+  const erc721 = await ethers.getContractAt('MockERC721', token);
+  const erc1155 = await ethers.getContractAt('MockERC1155', token);
+  const erc1155NFT = await ethers.getContractAt('MockERC1155NFT', token);
+
+  const lootboxFactory = await ethers.getContractAt('LootboxFactory', factory);
+  const lootboxAddress = await lootboxFactory.getLootbox(deployerAddress, id);
+
+  assert(lootboxAddress != ZERO_ADDRESS, `Lootbox with id ${id} and deployer ${deployerAddress} is not found.`);
+  const lootbox = await ethers.getContractAt('LootboxInterface', lootboxAddress);
+  assert(await lootbox.supplyAllowed(supplier.address), `Wallet ${supplier.address} is not allowed to supply rewards. Allowed: ${await lootbox.getSuppliers()}`);
+  assert((await ethers.provider.getCode(token)).length > 2, `Token ${token} does not exist`);
+
+  if (type == 'ERC20') {
+    await (await erc20.connect(supplier).transfer(lootboxAddress, amount)).wait();
+  } else if (type == 'ERC721') {
+    await (await erc721.connect(supplier)['safeTransferFrom(address,address,uint256)'](supplier.address, lootboxAddress, tokenid)).wait();
+  } else if (type == 'ERC1155') {
+    assert(amount > 1, 'ERC1155 should be transferred in amount > 1 to not make it ERC1155NFT in the lootbox contract.');
+    await (await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootboxAddress, tokenid, amount, '0x')).wait();
+  } else if (type == 'ERC1155NFT') {
+    await (await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootboxAddress, tokenid, 1, '0x')).wait();
+  } else {
+    throw new Error(`Unexpected reward type: ${type}`);
+  }
+
+  console.log(`Rewards supplied ${type}.`);
+});
+
 module.exports = {
   solidity: {
     version: '0.8.20',
