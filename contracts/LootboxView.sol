@@ -215,7 +215,7 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155PresetMinterPauser {
   }
 
   /// @notice Calculates the opening price of lootboxes.
-  /// @param _gas The gas of the request price.
+  /// @param _gas The gas of the request price. Safe estimate is number of reward units multiplied by 100,000 plus 50,000.
   /// @param _gasPriceInWei The gas price for the opening transaction.
   /// @param _units The units being calculated.
   /// @return uint The VRF price after calculation with units and fees.

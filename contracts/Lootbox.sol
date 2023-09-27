@@ -497,7 +497,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   //////////////////////////////////////////////////////////////*/
 
   /// @notice Requests a lootbox openning paying with native currency
-  /// @param _gas Gas limit for allocation
+  /// @param _gas Gas limit for allocation. Safe estimate is number of reward units multiplied by 100,000 plus 50,000.
   /// @param _lootIds Lootbox ids to open
   /// @param _lootAmounts Lootbox amounts to open
   function open(uint32 _gas, uint[] calldata _lootIds, uint[] calldata _lootAmounts) external notEmergency() payable {
