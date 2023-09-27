@@ -318,21 +318,22 @@ task('fulfill', 'Fulfill an open request to allocate rewards')
 task('inventory', 'Get inventory')
 .addOptionalParam('factory', 'LootboxFactory address')
 .addOptionalParam('id', 'Lootbox id for contract address predictability', 0, types.int)
-.setAction(async ({ factory, id }) => {
-  assert(network.name == 'localhost', 'Only for testing');
+.addOptionalParam('deployer', 'Wallet address that deployed the lootbox')
+.setAction(async ({ factory, id, deployer: deployerAddress }) => {
   const { chainId } = network.config;
   assert(chainId, 'Missing network configuration!');
 
   const [deployer, supplier] = await ethers.getSigners();
+  deployerAddress = deployerAddress || deployer.address;
 
   const predictedAddress = ethers.utils.getContractAddress({
-    from: deployer.address,
+    from: deployerAddress,
     nonce: 0,
   });
   factory = factory || predictedAddress;
 
   const lootboxFactory = await ethers.getContractAt('LootboxFactory', factory);
-  const lootboxAddress = await lootboxFactory.getLootbox(deployer.address, id);
+  const lootboxAddress = await lootboxFactory.getLootbox(deployerAddress, id);
   const lootbox = await ethers.getContractAt('LootboxInterface', lootboxAddress);
 
   const inventory = await lootbox.getInventory();
