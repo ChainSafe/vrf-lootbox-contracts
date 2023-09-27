@@ -1,6 +1,7 @@
 const { setBalance } = require('@nomicfoundation/hardhat-network-helpers');
 require('@nomicfoundation/hardhat-toolbox');
 require('hardhat-docgen');
+require("@chainsafe/hardhat-ts-artifact-plugin");
 require('dotenv').config();
 const networkConfig = require('./network.config.js');
 const util = require('node:util');

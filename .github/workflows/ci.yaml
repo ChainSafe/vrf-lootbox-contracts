@@ -1,0 +1,49 @@
+name: 'ci / test'
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - '**'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          cache: 'npm'
+          node-version: 18
+      - run: npm ci 
+      - run: npm run compile
+      - run: npm run test
+      - run: npm run hardhat docgen
+
+      # maybe release
+      - uses: google-github-actions/release-please-action@v3
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: release
+        with:
+          release-type: node
+          package-name: release-please-action
+          changelog-types: '[{"type":"feat","section":"Features","hidden":false},{"type":"fix","section":"Bug Fixes","hidden":false},{"type":"chore","section":"Miscellaneous","hidden":true}]'
+      
+      - name: Setup Pages
+        if: ${{ steps.release.outputs.release_created }}
+        uses: actions/configure-pages@v3
+      - name: Upload artifact
+        if: ${{ steps.release.outputs.release_created }}
+        uses: actions/upload-pages-artifact@v2
+        with:
+          path: 'docs'
+      - name: Deploy to GitHub Pages
+        if: ${{ steps.release.outputs.release_created }}
+        id: deployment
+        uses: actions/deploy-pages@v2
+
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
+        if: ${{ steps.release.outputs.release_created }}
+
