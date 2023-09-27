@@ -1,5 +1,16 @@
 {
-  "name": "vrf-lootbox-contracts",
+  "name": "@chainsafe/vrf-lootbox-contracts",
+  "version": "1.0.0",
+  "author": "ChainSafe <info@chainsafe.io>",
+  "license": "MIT",
+  "homepage": "https://github.com/ChainSafe/vrf-lootbox-contracts#readme",
+  "repository": {
+		"type": "git",
+		"url": "git+https://github.com/ChainSafe/vrf-lootbox-contracts.git"
+	},
+  "files": [
+    "artifacts"
+  ],
   "scripts": {
     "node": "hardhat node",
     "hardhat": "hardhat",
@@ -7,6 +18,7 @@
     "compile": "hardhat compile"
   },
   "devDependencies": {
+    "@chainsafe/hardhat-ts-artifact-plugin": "^1.0.0",
     "@nomicfoundation/hardhat-toolbox": "^2.0.2",
     "dotenv": "^16.3.1",
     "hardhat": "^2.17.0",
