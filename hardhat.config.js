@@ -5,6 +5,7 @@ require("@chainsafe/hardhat-ts-artifact-plugin");
 require('dotenv').config();
 const networkConfig = require('./network.config.js');
 const util = require('node:util');
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
 const sleep = (msec) => {
   return new Promise((resolve) => {
