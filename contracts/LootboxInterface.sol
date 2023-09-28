@@ -267,6 +267,9 @@ abstract contract LootboxInterface is VRFV2WrapperConsumerBase, ERC721Holder, ER
   /// @notice Purchase price is unexpectedly high or zero
   error UnexpectedPrice(uint currentPrice);
 
+  /// @notice Caller does not have required role
+  error AccessDenied(bytes32 role);
+
   /// @notice Sets the URI for the contract.
   /// @param _baseURI The base URI being used.
   function setURI(string memory _baseURI) external virtual;
