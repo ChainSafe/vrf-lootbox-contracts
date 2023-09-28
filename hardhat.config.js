@@ -467,6 +467,7 @@ module.exports = {
     version: '0.8.20',
     settings: {
       optimizer: { enabled: true, runs: 120 },
+      evmVersion: 'paris',
     },
   },
   defaultNetwork: 'localhost',
@@ -508,11 +509,29 @@ module.exports = {
       accounts:
         isSet(process.env.SEPOLIA_PRIVATE_KEY) ? [process.env.SEPOLIA_PRIVATE_KEY] : [],
     },
-    goerli: {
-      chainId: 5,
-      url: process.env.GOERLI_URL || '',
+    fantomtest: {
+      chainId: 4002,
+      url: process.env.FANTOMTEST_URL || '',
       accounts:
-        isSet(process.env.GOERLI_PRIVATE_KEY) ? [process.env.GOERLI_PRIVATE_KEY] : [],
+        isSet(process.env.FANTOMTEST_PRIVATE_KEY) ? [process.env.FANTOMTEST_PRIVATE_KEY] : [],
+    },
+    fuji: {
+      chainId: 43113,
+      url: process.env.FUJI_URL || '',
+      accounts:
+        isSet(process.env.FUJI_PRIVATE_KEY) ? [process.env.FUJI_PRIVATE_KEY] : [],
+    },
+    mumbai: {
+      chainId: 80001,
+      url: process.env.MUMBAI_URL || '',
+      accounts:
+        isSet(process.env.MUMBAI_PRIVATE_KEY) ? [process.env.MUMBAI_PRIVATE_KEY] : [],
+    },
+    bsctest: {
+      chainId: 97,
+      url: process.env.BSCTEST_URL || '',
+      accounts:
+        isSet(process.env.BSCTEST_PRIVATE_KEY) ? [process.env.BSCTEST_PRIVATE_KEY] : [],
     },
   },
   gasReporter: {

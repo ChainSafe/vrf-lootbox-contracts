@@ -325,6 +325,9 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @notice Purchase price is unexpectedly high or zero
   error UnexpectedPrice(uint currentPrice);
 
+  /// @notice Caller does not have required role
+  error AccessDenied(bytes32 role);
+
   /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
   //////////////////////////////////////////////////////////////*/
@@ -364,6 +367,11 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
 
   modifier onlyAdmin() {
     _checkRole(DEFAULT_ADMIN_ROLE);
+    _;
+  }
+
+  modifier onlyPauser() {
+    _checkRole(PAUSER_ROLE);
     _;
   }
 
@@ -1139,5 +1147,18 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
       unitsMinted = unitsMinted - unitBoxesRemoved;
     }
     super._afterTokenTransfer(operator, from, to, ids, amounts, data);
+  }
+
+  // @dev Added override for code size optimization.
+  function _checkRole(bytes32 role) internal view override {
+    if (_not(hasRole(role, _msgSender()))) revert AccessDenied(role);
+  }
+
+  function pause() public override onlyPauser() {
+    _pause();
+  }
+
+  function unpause() public override onlyPauser() {
+    _unpause();
   }
 }

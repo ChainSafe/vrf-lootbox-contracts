@@ -183,9 +183,9 @@ describe('Lootbox', function () {
     const { lootbox } = await loadFixture(deployLootbox);
     const [_, other] = await ethers.getSigners();
     await expect(lootbox.connect(other).setURI('newUri'))
-      .to.be.revertedWith(/AccessControl/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
     await expect(lootbox.connect(other).setURI(''))
-      .to.be.revertedWith(/AccessControl/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
   });
 
   it('should allow admin to add suppliers', async function () {
@@ -215,9 +215,9 @@ describe('Lootbox', function () {
     const { lootbox } = await loadFixture(deployLootbox);
     const [_, other] = await ethers.getSigners();
     await expect(lootbox.connect(other).addSuppliers([other.address]))
-      .to.be.revertedWith(/AccessControl/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
     await expect(lootbox.connect(other).addSuppliers([]))
-      .to.be.revertedWith(/AccessControl/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
   });
   it('should allow admin to remove suppliers', async function () {
     const { lootbox } = await loadFixture(deployLootbox);
@@ -251,11 +251,11 @@ describe('Lootbox', function () {
     const [owner, other] = await ethers.getSigners();
     await lootbox.addSuppliers([other.address]);
     await expect(lootbox.connect(other).removeSuppliers([other.address]))
-      .to.be.revertedWith(/AccessControl/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
     await expect(lootbox.connect(other).removeSuppliers([owner.address]))
-      .to.be.revertedWith(/AccessControl/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
     await expect(lootbox.connect(other).removeSuppliers([]))
-      .to.be.revertedWith(/AccessControl/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
   });
   it('should list suppliers', async function () {
     const { lootbox } = await loadFixture(deployLootbox);
@@ -294,9 +294,9 @@ describe('Lootbox', function () {
     const { lootbox } = await loadFixture(deployLootbox);
     const [_, other] = await ethers.getSigners();
     await expect(lootbox.connect(other).addTokens([other.address]))
-      .to.be.revertedWith(/AccessControl/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
     await expect(lootbox.connect(other).addTokens([]))
-      .to.be.revertedWith(/AccessControl/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
   });
   it('should list tokens', async function () {
     const { lootbox, erc20, erc721, erc1155 } = await loadFixture(deployLootbox);
@@ -391,22 +391,22 @@ describe('Lootbox', function () {
     const [owner, supplier, other] = await ethers.getSigners();
     await setBalance(lootbox.address, 100);
     await expect(lootbox.connect(other).withdraw(ZERO_ADDRESS, owner.address, 100))
-      .to.be.revertedWith(/AccessControl/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
     await expect(lootbox.connect(supplier).withdraw(ZERO_ADDRESS, other.address, 0))
-      .to.be.revertedWith(/AccessControl/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
     await expect(lootbox.connect(supplier).withdraw(ZERO_ADDRESS, ZERO_ADDRESS, 0))
-      .to.be.revertedWith(/AccessControl/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
   });
   it('should restrict others to withdraw ERC20', async function () {
     const { lootbox, erc20 } = await loadFixture(deployLootbox);
     const [owner, supplier, other] = await ethers.getSigners();
     await erc20.connect(supplier).transfer(lootbox.address, 100);
     await expect(lootbox.connect(other).withdraw(erc20.address, owner.address, 100))
-      .to.be.revertedWith(/AccessControl/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
     await expect(lootbox.connect(supplier).withdraw(erc20.address, other.address, 0))
-      .to.be.revertedWith(/AccessControl/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
     await expect(lootbox.connect(supplier).withdraw(erc20.address, ZERO_ADDRESS, 0))
-      .to.be.revertedWith(/AccessControl/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
   });
 
   // it.skip('should allow admin to withdraw allowed ERC20 from inventory', async function () {});
@@ -690,9 +690,9 @@ describe('Lootbox', function () {
     await erc20extra.connect(supplier).transfer(lootbox.address, totalAmount);
     await lootbox.setAmountsPerUnit([erc20.address], [NOT_USED], [amountPerUnit]);
     await expect(lootbox.connect(supplier).emergencyWithdraw(erc20.address, RewardType.ERC20, owner.address, [0], [300]))
-      .to.be.revertedWith(/AccessControl/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
     await expect(lootbox.connect(other).emergencyWithdraw(erc20extra.address, RewardType.ERC20, other.address, [0], [300]))
-      .to.be.revertedWith(/AccessControl/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
   });
   it('should restrict emergency withdraw with different input arrays length', async function () {
     const { lootbox, erc20 } = await loadFixture(deployLootbox);
@@ -962,7 +962,7 @@ describe('Lootbox', function () {
     await lootbox.addTokens([erc20.address]);
     await erc20.connect(supplier).transfer(lootbox.address, 100);
     await expect(lootbox.connect(supplier).setAmountsPerUnit([erc20.address], [NOT_USED], [0]))
-      .to.be.revertedWith(/AccessControl/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
   });
 
   it('should allow admin to set amounts per unit for ERC721', async function () {
@@ -1219,7 +1219,7 @@ describe('Lootbox', function () {
     await lootbox.addSuppliers([supplier.address]);
     await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 0);
     await expect(lootbox.connect(supplier).setAmountsPerUnit([erc721.address], [NOT_USED], [1]))
-      .to.be.revertedWith(/AccessControl/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
   });
 
   it('should allow admin to set amounts per unit for ERC1155 NFT', async function () {
@@ -1473,7 +1473,7 @@ describe('Lootbox', function () {
     await lootbox.addSuppliers([supplier.address]);
     await erc1155NFT.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x');
     await expect(lootbox.connect(supplier).setAmountsPerUnit([erc1155NFT.address], [NOT_USED], [1]))
-      .to.be.revertedWith(/AccessControl/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
   });
 
   it('should allow admin to set amounts per unit for ERC1155 per ID', async function () {
@@ -1819,7 +1819,7 @@ describe('Lootbox', function () {
     await lootbox.addSuppliers([supplier.address]);
     await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 100, '0x');
     await expect(lootbox.connect(supplier).setAmountsPerUnit([erc1155.address], [NOT_USED], [10]))
-      .to.be.revertedWith(/AccessControl/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
   });
 
   it('should allow supplier to supply allowed ERC721', async function () {
@@ -2509,7 +2509,7 @@ describe('Lootbox', function () {
     const { lootbox } = await loadFixture(deployLootbox);
     const [minter, other, user] = await ethers.getSigners();
     await expect(lootbox.connect(other).mint(user.address, 1, 10, '0x'))
-      .to.be.revertedWith(/role/);
+      .to.be.revertedWith('ERC1155PresetMinterPauser: must have minter role to mint');
   });
   it('should restrict minting of 0 id lootboxes', async function () {
     const { lootbox } = await loadFixture(deployLootbox);
@@ -2551,7 +2551,7 @@ describe('Lootbox', function () {
     const { lootbox } = await loadFixture(deployLootbox);
     const [minter, other, user] = await ethers.getSigners();
     await expect(lootbox.connect(other).mintToMany([user.address, other.address], [1, 3], [10, 4]))
-      .to.be.revertedWith(/role/);
+      .to.be.revertedWithCustomError(lootbox, 'AccessDenied');
   });
   it('should restrict minting of 0 id lootboxes to many receivers', async function () {
     const { lootbox } = await loadFixture(deployLootbox);
