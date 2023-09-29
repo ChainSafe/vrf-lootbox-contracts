@@ -336,12 +336,14 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @param _link The ChainLink LINK token address.
   /// @param _vrfV2Wrapper The ChainLink VRFV2Wrapper contract address.
   /// @param _view The LootboxView contract address.
+  /// @param _factory The LootboxFactory contract address.
   constructor(
     address _link,
     address _vrfV2Wrapper,
-    address _view
+    address _view,
+    address payable _factory
   ) VRFV2WrapperConsumerBase(_link, _vrfV2Wrapper) ERC1155PresetMinterPauser('') {
-    FACTORY = ILootboxFactory(payable(msg.sender));
+    FACTORY = ILootboxFactory(_factory);
     VIEW = _view;
   }
 

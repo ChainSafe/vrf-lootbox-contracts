@@ -122,11 +122,13 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155PresetMinterPauser {
   /// @notice Deploys a new Lootbox contract with the given parameters.
   /// @param _link The ChainLink LINK token address.
   /// @param _vrfV2Wrapper The ChainLink VRFV2Wrapper contract address.
+  /// @param _factory The LootboxFactory contract address.
   constructor(
     address _link,
-    address _vrfV2Wrapper
+    address _vrfV2Wrapper,
+    address payable _factory
   ) ERC1155PresetMinterPauser('') {
-    FACTORY = ILootboxFactory(payable(msg.sender));
+    FACTORY = ILootboxFactory(_factory);
     LINK_ETH_FEED = IVRFV2Wrapper(_vrfV2Wrapper).LINK_ETH_FEED();
     VRF_V2_WRAPPER = VRFV2WrapperInterface(_vrfV2Wrapper);
     LINK = _link;

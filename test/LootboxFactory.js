@@ -6,14 +6,23 @@ const { linkToken, vrfV2Wrapper, linkHolder } = require('../network.config.js')[
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
 describe('LootboxFactory', function () {
+  const deploy = async (contractName, signer, ...params) => {
+    const factory = await ethers.getContractFactory(contractName);
+    const instance = await factory.connect(signer).deploy(...params);
+    await instance.deployed();
+    return instance;
+  };
+
   const deployFactory = async (linkAddress, wrapperAddress) => {
+    wrapperAddress = wrapperAddress || vrfV2Wrapper;
     const [deployer, supplier, user] = await ethers.getSigners();
     const link = await ethers.getContractAt('LinkTokenInterface', linkAddress || linkToken);
-    const lootboxFactoryFactory = await ethers.getContractFactory('LootboxFactory');
-    const factory = await lootboxFactoryFactory.deploy(
-      link.address,
-      wrapperAddress || vrfV2Wrapper
-    );
+    const nonce = await ethers.provider.getTransactionCount(deployer.address);
+    const lootboxAddress = ethers.utils.getContractAddress({from: deployer.address, nonce: nonce + 1});
+    const viewAddress = ethers.utils.getContractAddress({from: deployer.address, nonce: nonce + 2});
+    const factory = await deploy('LootboxFactory', deployer, link.address, lootboxAddress, {nonce});
+    await deploy('Lootbox', deployer, link.address, wrapperAddress, viewAddress, factory.address, {nonce: nonce + 1});
+    await deploy('LootboxView', deployer, link.address, wrapperAddress, factory.address, {nonce: nonce + 2});
 
     await factory.deployed();
     const impersonatedLinkHolder = await ethers.getImpersonatedSigner(linkHolder);
@@ -30,14 +39,12 @@ describe('LootboxFactory', function () {
   it('should deploy lootbox factory and have valid defaults', async function () {
     const { factory } = await loadFixture(deployFactory);
     expect(await factory.LINK()).to.equal(linkToken);
-    expect(await factory.VRFV2WRAPPER()).to.equal(vrfV2Wrapper);
     expect(await factory.feePerDeploy()).to.equal(0);
     expect(await factory.defaultFeePerUnit()).to.equal(0);
     const [someone, another] = await ethers.getSigners();
     await setCode(another.address, await ethers.provider.getCode(vrfV2Wrapper));
     const { factory: factory2 } = await deployFactory(someone.address, another.address);
     expect(await factory2.LINK()).to.equal(someone.address);
-    expect(await factory2.VRFV2WRAPPER()).to.equal(another.address);
   });
   it('should allow owner to set fee per deploy', async function () {
     const { factory } = await loadFixture(deployFactory);
