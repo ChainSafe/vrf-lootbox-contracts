@@ -39,7 +39,12 @@ describe('Lootbox', function () {
     const wrapper = wrapperAddress || vrfV2Wrapper;
     const [owner, supplier, user] = await ethers.getSigners();
     const link = await ethers.getContractAt('LinkTokenInterface', linkAddress || linkToken);
-    const factory = await deploy('LootboxFactory', owner, link.address, wrapper);
+    const nonce = await ethers.provider.getTransactionCount(owner.address);
+    const lootboxAddress = ethers.utils.getContractAddress({from: owner.address, nonce: nonce + 1});
+    const viewAddress = ethers.utils.getContractAddress({from: owner.address, nonce: nonce + 2});
+    const factory = await deploy('LootboxFactory', owner, link.address, lootboxAddress, {nonce});
+    await deploy('Lootbox', owner, link.address, wrapper, viewAddress, factory.address, {nonce: nonce + 1});
+    await deploy('LootboxView', owner, link.address, wrapper, factory.address, {nonce: nonce + 2});
 
     const impersonatedLinkHolder = await ethers.getImpersonatedSigner(linkHolder);
     await link.connect(impersonatedLinkHolder)

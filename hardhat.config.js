@@ -48,27 +48,27 @@ task('deploy-factory', 'Deploys LootboxFactory')
 
   const { linkToken, vrfV2Wrapper } = networkConfig[chainId];
 
-  const lootboxFactoryFactory = await ethers.getContractFactory('LootboxFactory');
-  const lootboxFactory = await lootboxFactoryFactory.deploy(linkToken, vrfV2Wrapper);
-  await lootboxFactory.deployed();
-  console.log(`LootboxFactory deployed by ${deployer.address} to: ${lootboxFactory.address} ${network.name}`);
+  const nonce = await ethers.provider.getTransactionCount(deployer.address);
+  const lootboxAddress = ethers.utils.getContractAddress({from: deployer.address, nonce: nonce + 1});
+  const viewAddress = ethers.utils.getContractAddress({from: deployer.address, nonce: nonce + 2});
+  const factory = await deploy('LootboxFactory', deployer, linkToken, lootboxAddress, {nonce});
+  await deploy('Lootbox', deployer, linkToken, vrfV2Wrapper, viewAddress, factory.address, {nonce: nonce + 1});
+  await deploy('LootboxView', deployer, linkToken, vrfV2Wrapper, factory.address, {nonce: nonce + 2});
 
   if (verify === 'true') {
     console.log('Waiting half a minute to start verification');
     await sleep(30000);
     await hre.run('verify:verify', {
-      address: lootboxFactory.address,
-      constructorArguments: [linkToken, vrfV2Wrapper],
+      address: factory.address,
+      constructorArguments: [linkToken, lootboxAddress],
     });
-    const view = await ethers.getContractAt('LootboxInterface', await lootboxFactory.VIEW());
     await hre.run('verify:verify', {
-      address: view.address,
-      constructorArguments: [linkToken, vrfV2Wrapper],
+      address: lootboxAddress,
+      constructorArguments: [linkToken, vrfV2Wrapper, viewAddress, factory.address],
     });
-    const feed = await view.LINK_ETH_FEED();
     await hre.run('verify:verify', {
-      address: await lootboxFactory.LOOTBOX(),
-      constructorArguments: [linkToken, vrfV2Wrapper, feed, view.address],
+      address: viewAddress,
+      constructorArguments: [linkToken, vrfV2Wrapper, factory.address],
     });
   }
 });

@@ -45,9 +45,7 @@ contract LootboxFactory is ILootboxFactory, ERC677ReceiverInterface, Ownable {
   //////////////////////////////////////////////////////////////*/
 
   address public immutable LINK;
-  address public immutable VRFV2WRAPPER;
   address public immutable LOOTBOX;
-  address public immutable VIEW;
 
   uint public feePerDeploy = 0;
   mapping(address lootbox => uint feePerUnit) private fees;
@@ -69,21 +67,15 @@ contract LootboxFactory is ILootboxFactory, ERC677ReceiverInterface, Ownable {
   error AlreadyDeployed();
 
   /*//////////////////////////////////////////////////////////////
-                             VRF RELATED
-  //////////////////////////////////////////////////////////////*/
-
-  /*//////////////////////////////////////////////////////////////
                              CONSTRUCTOR
   //////////////////////////////////////////////////////////////*/
 
   constructor(
     address _link,
-    address _vrfV2Wrapper
+    address _lootbox
   ) {
     LINK = _link;
-    VRFV2WRAPPER = _vrfV2Wrapper;
-    VIEW = address(new LootboxView(_link, VRFV2WRAPPER));
-    LOOTBOX = address(new Lootbox(_link, _vrfV2Wrapper, VIEW));
+    LOOTBOX = _lootbox;
   }
 
   /*//////////////////////////////////////////////////////////////
