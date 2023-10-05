@@ -1,8 +1,9 @@
 const { setBalance } = require('@nomicfoundation/hardhat-network-helpers');
 require('@nomicfoundation/hardhat-toolbox');
 require('hardhat-docgen');
-require("@chainsafe/hardhat-ts-artifact-plugin");
+require('@chainsafe/hardhat-ts-artifact-plugin');
 require('dotenv').config();
+const { LedgerSigner } = require('@anders-t/ethers-ledger');
 const networkConfig = require('./network.config.js');
 const util = require('node:util');
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
@@ -44,8 +45,13 @@ task('deploy-factory', 'Deploys LootboxFactory')
   const { chainId } = network.config;
   assert(chainId, 'Missing network configuration!');
 
-  const [deployer] = await ethers.getSigners();
-
+  let [deployer] = await ethers.getSigners();
+  if (process.env.LEDGER_ADDRESS) {
+    console.log(`Using ledger ${process.env.LEDGER_PATH || 'default'} derivation path.`);
+    console.log(`Using ledger ${process.env.LEDGER_ADDRESS} address.`);
+    deployer = new LedgerSigner(ethers.provider, process.env.LEDGER_PATH);
+    deployer.address = process.env.LEDGER_ADDRESS;
+  }
   const { linkToken, vrfV2Wrapper } = networkConfig[chainId];
 
   const nonce = await ethers.provider.getTransactionCount(deployer.address);
@@ -500,9 +506,11 @@ module.exports = {
       ],
     },
     mainnet: {
-      url: process.env.MAINNET_URL || 'https://cloudflare-eth.com',
+      chainId: 1,
+      url: process.env.MAINNET_URL || '',
       accounts:
         isSet(process.env.MAINNET_PRIVATE_KEY) ? [process.env.MAINNET_PRIVATE_KEY] : [],
+      ledgerAccounts: isSet(process.env.LEDGER_ADDRESS) ? [process.env.LEDGER_ADDRESS] : [],
     },
     sepolia: {
       chainId: 11155111,
@@ -533,6 +541,34 @@ module.exports = {
       url: process.env.BSCTEST_URL || '',
       accounts:
         isSet(process.env.BSCTEST_PRIVATE_KEY) ? [process.env.BSCTEST_PRIVATE_KEY] : [],
+    },
+    fantom: {
+      chainId: 250,
+      url: process.env.FANTOM_URL || '',
+      accounts:
+        isSet(process.env.FANTOM_PRIVATE_KEY) ? [process.env.FANTOM_PRIVATE_KEY] : [],
+      ledgerAccounts: isSet(process.env.LEDGER_ADDRESS) ? [process.env.LEDGER_ADDRESS] : [],
+    },
+    avax: {
+      chainId: 43114,
+      url: process.env.AVAX_URL || '',
+      accounts:
+        isSet(process.env.AVAX_PRIVATE_KEY) ? [process.env.AVAX_PRIVATE_KEY] : [],
+      ledgerAccounts: isSet(process.env.LEDGER_ADDRESS) ? [process.env.LEDGER_ADDRESS] : [],
+    },
+    polygon: {
+      chainId: 137,
+      url: process.env.POLYGON_URL || '',
+      accounts:
+        isSet(process.env.POLYGON_PRIVATE_KEY) ? [process.env.POLYGON_PRIVATE_KEY] : [],
+      ledgerAccounts: isSet(process.env.LEDGER_ADDRESS) ? [process.env.LEDGER_ADDRESS] : [],
+    },
+    bsc: {
+      chainId: 56,
+      url: process.env.BSC_URL || '',
+      accounts:
+        isSet(process.env.BSC_PRIVATE_KEY) ? [process.env.BSC_PRIVATE_KEY] : [],
+      ledgerAccounts: isSet(process.env.LEDGER_ADDRESS) ? [process.env.LEDGER_ADDRESS] : [],
     },
   },
   gasReporter: {
