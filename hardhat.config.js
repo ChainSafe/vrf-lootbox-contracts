@@ -57,9 +57,9 @@ task('deploy-factory', 'Deploys LootboxFactory')
   const nonce = await ethers.provider.getTransactionCount(deployer.address);
   const lootboxAddress = ethers.utils.getContractAddress({from: deployer.address, nonce: nonce + 1});
   const viewAddress = ethers.utils.getContractAddress({from: deployer.address, nonce: nonce + 2});
-  const factory = await deploy('LootboxFactory', deployer, linkToken, lootboxAddress, {nonce});
-  await deploy('Lootbox', deployer, linkToken, vrfV2Wrapper, viewAddress, factory.address, {nonce: nonce + 1});
-  await deploy('LootboxView', deployer, linkToken, vrfV2Wrapper, factory.address, {nonce: nonce + 2});
+  const factory = await deploy('LootboxFactory', deployer, linkToken, lootboxAddress, {nonce, gasLimit: 1100000});
+  await deploy('Lootbox', deployer, linkToken, vrfV2Wrapper, viewAddress, factory.address, {nonce: nonce + 1, gasLimit: 6000000});
+  await deploy('LootboxView', deployer, linkToken, vrfV2Wrapper, factory.address, {nonce: nonce + 2, gasLimit: 4100000});
 
   if (verify === 'true') {
     console.log('Waiting half a minute to start verification');
