@@ -527,7 +527,6 @@ module.exports = {
       url: process.env.MAINNET_URL || '',
       accounts:
         isSet(process.env.MAINNET_PRIVATE_KEY) ? [process.env.MAINNET_PRIVATE_KEY] : [],
-      ledgerAccounts: isSet(process.env.LEDGER_ADDRESS) ? [process.env.LEDGER_ADDRESS] : [],
     },
     sepolia: {
       chainId: 11155111,

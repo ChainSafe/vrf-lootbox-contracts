@@ -512,7 +512,8 @@ describe('Lootbox', function () {
     await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 2, 10, '0x');
     await erc1155extra.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 1, 10, '0x');
     await erc1155extra.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 5, 10, '0x');
-    await lootbox.setAmountsPerUnit([erc1155.address], [0], [3]);
+    await lootbox.setAmountsPerUnit([erc1155.address, erc1155.address, erc1155.address], [0, 3, 2], [3, 0, 0]);
+    await lootbox.setAmountsPerUnit([erc1155extra.address, erc1155extra.address], [1, 5], [0, 0]);
     let tx = lootbox.emergencyWithdraw(erc1155.address, RewardType.ERC1155, supplier.address, [0], [10]);
     await expectContractEvents(tx, lootbox, [
       ['EmergencyModeEnabled', owner.address],
@@ -1479,20 +1480,20 @@ describe('Lootbox', function () {
     await lootbox.addTokens([erc1155.address]);
     await lootbox.addSuppliers([supplier.address]);
     await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 100, '0x');
-    await expectInventory(lootbox, [], [{
+    await expectInventory(lootbox, [{
       rewardToken: erc1155.address,
       rewardType: RewardType.ERC1155,
-      units: 0,
+      units: 100,
       amountPerUnit: NOT_USED,
       balance: NOT_USED,
       extra: [{
         id: 0,
-        units: 0,
-        amountPerUnit: 0,
+        units: 100,
+        amountPerUnit: 1,
         balance: 100,
       }],
-    }]);
-    expect(await lootbox.unitsSupply()).to.equal(0);
+    }], []);
+    expect(await lootbox.unitsSupply()).to.equal(100);
     await expect(lootbox.setAmountsPerUnit([erc1155.address], [0], [0]))
       .to.emit(lootbox, 'AmountPerUnitSet')
       .withArgs(erc1155.address, 0, 0, 0);
@@ -1511,7 +1512,19 @@ describe('Lootbox', function () {
     }]);
     expect(await lootbox.unitsSupply()).to.equal(0);
     await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 2, 200, '0x');
-    await expectInventory(lootbox, [], [{
+    await expectInventory(lootbox, [{
+      rewardToken: erc1155.address,
+      rewardType: RewardType.ERC1155,
+      units: 200,
+      amountPerUnit: NOT_USED,
+      balance: NOT_USED,
+      extra: [{
+        id: 2,
+        units: 200,
+        amountPerUnit: 1,
+        balance: 200,
+      }],
+    }], [{
       rewardToken: erc1155.address,
       rewardType: RewardType.ERC1155,
       units: 0,
@@ -1522,46 +1535,34 @@ describe('Lootbox', function () {
         units: 0,
         amountPerUnit: 0,
         balance: 100,
-      }, {
-        id: 2,
-        units: 0,
-        amountPerUnit: 0,
-        balance: 200,
       }],
     }]);
-    expect(await lootbox.unitsSupply()).to.equal(0);
+    expect(await lootbox.unitsSupply()).to.equal(200);
     await expect(lootbox.setAmountsPerUnit([erc1155.address], [0], [5]))
       .to.emit(lootbox, 'AmountPerUnitSet')
-      .withArgs(erc1155.address, 0, 5, 20);
+      .withArgs(erc1155.address, 0, 5, 220);
     await expectInventory(lootbox, [{
       rewardToken: erc1155.address,
       rewardType: RewardType.ERC1155,
-      units: 20,
+      units: 220,
       amountPerUnit: NOT_USED,
       balance: NOT_USED,
       extra: [{
+        id: 2,
+        units: 200,
+        amountPerUnit: 1,
+        balance: 200,
+      }, {
         id: 0,
         units: 20,
         amountPerUnit: 5,
         balance: 100,
       }],
-    }], [{
-      rewardToken: erc1155.address,
-      rewardType: RewardType.ERC1155,
-      units: NOT_USED,
-      amountPerUnit: NOT_USED,
-      balance: NOT_USED,
-      extra: [{
-        id: 2,
-        units: 0,
-        amountPerUnit: 0,
-        balance: 200,
-      }],
-    }]);
-    expect(await lootbox.unitsSupply()).to.equal(20);
+    }], []);
+    expect(await lootbox.unitsSupply()).to.equal(220);
     await expect(lootbox.setAmountsPerUnit([erc1155.address, erc1155.address], [0, 2], [5, 40]))
       .to.emit(lootbox, 'AmountPerUnitSet')
-      .withArgs(erc1155.address, 0, 5, 20)
+      .withArgs(erc1155.address, 0, 5, 220)
       .to.emit(lootbox, 'AmountPerUnitSet')
       .withArgs(erc1155.address, 2, 40, 25);
     await expectInventory(lootbox, [{
@@ -1571,15 +1572,15 @@ describe('Lootbox', function () {
       amountPerUnit: NOT_USED,
       balance: NOT_USED,
       extra: [{
-        id: 0,
-        units: 20,
-        amountPerUnit: 5,
-        balance: 100,
-      }, {
         id: 2,
         units: 5,
         amountPerUnit: 40,
         balance: 200,
+      }, {
+        id: 0,
+        units: 20,
+        amountPerUnit: 5,
+        balance: 100,
       }],
     }], []);
     expect(await lootbox.unitsSupply()).to.equal(25);
@@ -2182,26 +2183,26 @@ describe('Lootbox', function () {
     await expect(erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 1, '0x'))
       .to.be.revertedWithCustomError(lootbox, 'ModifiedRewardType');
   });
-  it('should put first time supplied single ERC1155 into leftovers with 0 reward per unit', async function () {
+  it('should put first time supplied single ERC1155 into inventory with 1 reward per unit', async function () {
     const { lootbox, erc1155 } = await loadFixture(deployLootbox);
     const [owner, supplier] = await ethers.getSigners();
     await lootbox.addTokens([erc1155.address]);
     await lootbox.addSuppliers([supplier.address]);
     await erc1155.connect(supplier).safeTransferFrom(supplier.address, lootbox.address, 0, 11, '0x');
-    await expectInventory(lootbox, [], [{
+    await expectInventory(lootbox, [{
       rewardToken: erc1155.address,
       rewardType: RewardType.ERC1155,
-      units: NOT_USED,
+      units: 11,
       amountPerUnit: NOT_USED,
       balance: NOT_USED,
       extra: [{
         id: 0,
-        units: NOT_USED,
-        amountPerUnit: 0,
+        units: 11,
+        amountPerUnit: 1,
         balance: 11,
       }],
-    }]);
-    expect(await lootbox.unitsSupply()).to.equal(0);
+    }], []);
+    expect(await lootbox.unitsSupply()).to.equal(11);
     expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155]);
   });
   it('should put resupplied single ERC1155 into leftovers if configured with 0 reward per unit', async function () {
@@ -2343,7 +2344,7 @@ describe('Lootbox', function () {
     await expect(erc1155.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [1], [1], '0x'))
       .to.be.revertedWithCustomError(lootbox, 'ModifiedRewardType');
   });
-  it('should put first time supplied multiple ERC1155 into leftovers with 0 reward per unit', async function () {
+  it('should put first time supplied multiple ERC1155 into inventory with 1 reward per unit', async function () {
     const { lootbox, erc1155 } = await loadFixture(deployLootbox);
     const [owner, supplier] = await ethers.getSigners();
     await lootbox.addTokens([erc1155.address]);
@@ -2354,7 +2355,7 @@ describe('Lootbox', function () {
     await expectInventory(lootbox, [{
       rewardToken: erc1155.address,
       rewardType: RewardType.ERC1155,
-      units: 1,
+      units: 47,
       amountPerUnit: NOT_USED,
       balance: NOT_USED,
       extra: [{
@@ -2362,26 +2363,19 @@ describe('Lootbox', function () {
         units: 1,
         amountPerUnit: 11,
         balance: 11,
-      }],
-    }], [{
-      rewardToken: erc1155.address,
-      rewardType: RewardType.ERC1155,
-      units: NOT_USED,
-      amountPerUnit: NOT_USED,
-      balance: NOT_USED,
-      extra: [{
+      },{
         id: 1,
-        units: NOT_USED,
-        amountPerUnit: 0,
+        units: 13,
+        amountPerUnit: 1,
         balance: 13,
-      }, {
+      },{
         id: 2,
-        units: NOT_USED,
-        amountPerUnit: 0,
+        units: 33,
+        amountPerUnit: 1,
         balance: 33,
       }],
-    }]);
-    expect(await lootbox.unitsSupply()).to.equal(1);
+    }], []);
+    expect(await lootbox.unitsSupply()).to.equal(47);
     expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.ERC1155]);
   });
   it('should put resupplied multiple ERC1155 into leftovers if configured with 0 reward per unit', async function () {
@@ -2763,6 +2757,10 @@ describe('Lootbox', function () {
       [erc20extra.address, erc721extra.address, erc1155NFTextra.address],
       [0, 0, 0], [0, 0, 0]
     );
+    await lootbox.setAmountsPerUnit(
+      [erc1155extra.address, erc1155extra.address],
+      [4, 5], [0, 0]
+    );
     let price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 3);
     await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1, 2], [1, 1], {value: price});
     let requestId = await lootbox.openerRequests(user.address);
@@ -2953,6 +2951,10 @@ describe('Lootbox', function () {
     await lootbox.setAmountsPerUnit(
       [erc20extra.address, erc721extra.address, erc1155NFTextra.address],
       [0, 0, 0], [0, 0, 0]
+    );
+    await lootbox.setAmountsPerUnit(
+      [erc1155extra.address, erc1155extra.address],
+      [4, 5], [0, 0]
     );
     let price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 3);
     await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1, 2], [1, 1], {value: price});
@@ -3916,6 +3918,10 @@ describe('Lootbox', function () {
       await lootbox.setAmountsPerUnit(
         [erc20extra.address, erc721extra.address, erc1155NFTextra.address],
         [0, 0, 0], [0, 0, 0]
+      );
+      await lootbox.setAmountsPerUnit(
+        [erc1155extra.address, erc1155extra.address],
+        [4, 5], [0, 0]
       );
       let price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 3);
       await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1, 2], [1, 1], {value: price});

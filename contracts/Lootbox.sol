@@ -809,10 +809,13 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @param value The token value.
   function _supply1155(Reward storage reward, RewardInfo rewardInfo, address token, uint id, uint value) internal {
     RewardInfo extraInfo = reward.extraInfo[id];
-    bool isNotConfigured = isEmpty(extraInfo);
+    bool isNotConfigured = _not(extraIds[token].contains(id));
+    if (isNotConfigured) {
+      extraInfo = toInfo(0, 1);
+    }
     uint unitsOld = units(extraInfo);
-    uint unitsNew = unitsOld + (isNotConfigured ? 0 : (value / amountPerUnit(extraInfo)));
-    uint unitsAdded = unitsNew - unitsOld;
+    uint unitsAdded = amountPerUnit(extraInfo) == 0 ? 0 : value / amountPerUnit(extraInfo);
+    uint unitsNew = unitsOld + unitsAdded;
     if (unitsAdded > 0) {
       unitsSupply = unitsSupply + unitsAdded;
       reward.extraInfo[id] = toInfo(unitsNew, amountPerUnit(extraInfo));
