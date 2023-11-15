@@ -51,6 +51,6 @@ contract ERC1155Base is AccessControl, ERC1155, ERC1155Pausable, ERC1155Burnable
         override(ERC1155, AccessControl)
         returns (bool)
     {
-        return super.supportsInterface(interfaceId);
+        return ERC1155.supportsInterface(interfaceId) || AccessControl.supportsInterface(interfaceId);
     }
 }

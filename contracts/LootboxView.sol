@@ -435,7 +435,7 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155Base {
     return !_value;
   }
 
-  function supportsInterface(bytes4 interfaceId)
+  function supportsInterface(bytes4)
     public
     view
     virtual

@@ -413,14 +413,13 @@ abstract contract LootboxInterface is VRFV2WrapperConsumerBase, ERC721Holder, ER
 
   function getLinkPrice() external view virtual returns (uint);
 
-  function supportsInterface(bytes4 interfaceId)
+  function supportsInterface(bytes4)
     public
     view
     virtual
     override(ERC1155Base, ERC1155Holder)
     returns (bool)
   {
-    return ERC1155Base.supportsInterface(interfaceId) ||
-      ERC1155Holder.supportsInterface(interfaceId);
+    return false;
   }
 }
