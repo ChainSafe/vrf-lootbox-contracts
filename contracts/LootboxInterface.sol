@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
-import {ERC1155PresetMinterPauser} from '@openzeppelin/contracts/token/ERC1155/presets/ERC1155PresetMinterPauser.sol';
+import {ERC1155Base} from './ERC1155Base.sol';
 import {ERC721Holder} from '@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol';
-import {ERC1155Holder, ERC1155Receiver} from '@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol';
+import {ERC1155Holder} from '@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol';
 import {VRFV2WrapperConsumerBase} from '@chainlink/contracts/src/v0.8/VRFV2WrapperConsumerBase.sol';
 import {EnumerableSet} from '@openzeppelin/contracts/utils/structs/EnumerableSet.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
@@ -33,7 +33,7 @@ import {RewardInfo} from './Lootbox.sol';
 /// @title Lootbox Interface to combine Lootbox implementation and View contracts.
 /// @author ChainSafe Systems: Oleksii (Functionality) Sneakz (Natspec assistance)
 
-abstract contract LootboxInterface is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC1155PresetMinterPauser {
+abstract contract LootboxInterface is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC1155Base {
   enum RewardType {
     UNSET,
     ERC20,
@@ -417,10 +417,10 @@ abstract contract LootboxInterface is VRFV2WrapperConsumerBase, ERC721Holder, ER
     public
     view
     virtual
-    override(ERC1155Receiver, ERC1155PresetMinterPauser)
+    override(ERC1155Base, ERC1155Holder)
     returns (bool)
   {
-    return ERC1155Receiver.supportsInterface(interfaceId) ||
-      ERC1155PresetMinterPauser.supportsInterface(interfaceId);
+    return ERC1155Base.supportsInterface(interfaceId) ||
+      ERC1155Holder.supportsInterface(interfaceId);
   }
 }

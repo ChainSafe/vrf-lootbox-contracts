@@ -66,7 +66,7 @@ describe('LootboxFactory', function () {
     const { factory } = await loadFixture(deployFactory);
     const [_, other] = await ethers.getSigners();
     await expect(factory.connect(other).setFeePerDeploy(100))
-      .to.be.revertedWith(/Ownable/);
+      .to.be.revertedWithCustomError(factory, 'OwnableUnauthorizedAccount');
   });
   it('should allow owner to set fee per unit', async function () {
     const { factory } = await loadFixture(deployFactory);
@@ -112,9 +112,9 @@ describe('LootboxFactory', function () {
     const { factory } = await loadFixture(deployFactory);
     const [_, other] = await ethers.getSigners();
     await expect(factory.connect(other).setFeePerUnit(ZERO_ADDRESS, 100))
-      .to.be.revertedWith(/Ownable/);
+      .to.be.revertedWithCustomError(factory, 'OwnableUnauthorizedAccount');
     await expect(factory.connect(other).setFeePerUnit(other.address, 100))
-      .to.be.revertedWith(/Ownable/);
+      .to.be.revertedWithCustomError(factory, 'OwnableUnauthorizedAccount');
   });
   it('should allow owner to set default fee per unit', async function () {
     // Covered by: should allow owner to set fee per unit.
@@ -155,18 +155,18 @@ describe('LootboxFactory', function () {
     const [owner, other, user] = await ethers.getSigners();
     await other.sendTransaction({ to: factory.address, value: 200 });
     await expect(factory.connect(other).withdraw(ZERO_ADDRESS, owner.address, 50))
-      .to.be.revertedWith(/Ownable/);
+      .to.be.revertedWithCustomError(factory, 'OwnableUnauthorizedAccount');
     await expect(factory.connect(user).withdraw(ZERO_ADDRESS, user.address, 50))
-      .to.be.revertedWith(/Ownable/);
+      .to.be.revertedWithCustomError(factory, 'OwnableUnauthorizedAccount');
   });
   it('should restrict others to withdraw tokens', async function () {
     const { factory, link } = await loadFixture(deployFactory);
     const [owner, other, user] = await ethers.getSigners();
     await link.transfer(factory.address, 200);
     await expect(factory.connect(other).withdraw(link.address, owner.address, 50))
-      .to.be.revertedWith(/Ownable/);
+      .to.be.revertedWithCustomError(factory, 'OwnableUnauthorizedAccount');
     await expect(factory.connect(user).withdraw(link.address, user.address, 50))
-      .to.be.revertedWith(/Ownable/);
+      .to.be.revertedWithCustomError(factory, 'OwnableUnauthorizedAccount');
   });
   it('should allow receiving native currency and emit a Payment event', async function () {
     const { factory } = await loadFixture(deployFactory);
@@ -287,5 +287,26 @@ describe('LootboxFactory', function () {
     expect(await lootbox.uri(0)).to.equal('someUri');
     expect(await lootbox.hasRole(adminRole, owner.address)).to.be.true;
     expect(await lootbox.FACTORY()).to.equal(factory.address);
+  });
+  it('should allow deploying lootboxes with setup', async function () {
+    const { factory, link } = await loadFixture(deployFactory);
+    const [owner, other] = await ethers.getSigners();
+    const deployTx = factory.deployLootboxWithSetup('', 0, [other.address], [link.address], 10);
+    await deployTx;
+    const deployedLootbox = await factory.getLootbox(owner.address, 0);
+    await expect(deployTx)
+      .to.emit(factory, 'Deployed')
+      .withArgs(deployedLootbox, owner.address, 0);
+    await expect(factory.connect(other).deployLootbox('', 0))
+      .to.emit(factory, 'Deployed')
+      .withArgs(anyValue, other.address, 0);
+    const lootbox = await ethers.getContractAt('LootboxInterface', deployedLootbox);
+    const adminRole = await lootbox.DEFAULT_ADMIN_ROLE();
+    expect(await lootbox.uri(0)).to.equal('');
+    expect(await lootbox.hasRole(adminRole, owner.address)).to.be.true;
+    expect(await lootbox.FACTORY()).to.equal(factory.address);
+    expect(await lootbox.getSuppliers()).to.eql([other.address]);
+    expect(await lootbox.getAllowedTokens()).to.eql([link.address]);
+    expect(await lootbox.getPrice()).to.equal(10);
   });
 });

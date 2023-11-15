@@ -6,16 +6,17 @@ import {IERC721} from '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 import {IERC1155} from '@openzeppelin/contracts/token/ERC1155/IERC1155.sol';
 import {IERC721Receiver} from '@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol';
 import {ERC721Holder} from '@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol';
-import {ERC1155PresetMinterPauser} from '@openzeppelin/contracts/token/ERC1155/presets/ERC1155PresetMinterPauser.sol';
-import {ERC1155Holder, ERC1155Receiver} from '@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol';
+import {ERC1155Holder} from '@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import {EnumerableSet} from '@openzeppelin/contracts/utils/structs/EnumerableSet.sol';
 import {SafeCast} from '@openzeppelin/contracts/utils/math/SafeCast.sol';
 import {Address} from '@openzeppelin/contracts/utils/Address.sol';
+import {Multicall} from '@openzeppelin/contracts/utils/Multicall.sol';
 import {VRFCoordinatorV2Interface} from '@chainlink/contracts/src/v0.8/interfaces/VRFCoordinatorV2Interface.sol';
 import {ERC677ReceiverInterface} from '@chainlink/contracts/src/v0.8/interfaces/ERC677ReceiverInterface.sol';
 import {VRFV2WrapperInterface} from '@chainlink/contracts/src/v0.8/interfaces/VRFV2WrapperInterface.sol';
 import {VRFV2WrapperConsumerBase} from '@chainlink/contracts/src/v0.8/VRFV2WrapperConsumerBase.sol';
+import {ERC1155Base} from './ERC1155Base.sol';
 import {ILootboxFactory} from './interfaces/ILootboxFactory.sol';
 import {IVRFV2Wrapper, AggregatorV3Interface} from './interfaces/IVRFV2Wrapper.sol';
 import {LootboxInterface} from './LootboxInterface.sol';
@@ -75,7 +76,7 @@ import {LootboxInterface} from './LootboxInterface.sol';
 type RewardInfo is uint248; // 8 bytes unitsAvailable | 23 bytes amountPerUnit
 uint constant UNITS_OFFSET = 8 * 23;
 
-contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC1155PresetMinterPauser {
+contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC1155Base, Multicall {
   using SafeERC20 for IERC20;
   using EnumerableSet for EnumerableSet.AddressSet;
   using EnumerableSet for EnumerableSet.UintSet;
@@ -325,9 +326,6 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @notice Purchase price is unexpectedly high or zero
   error UnexpectedPrice(uint currentPrice);
 
-  /// @notice Caller does not have required role
-  error AccessDenied(bytes32 role);
-
   /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
   //////////////////////////////////////////////////////////////*/
@@ -342,7 +340,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
     address _vrfV2Wrapper,
     address _view,
     address payable _factory
-  ) VRFV2WrapperConsumerBase(_link, _vrfV2Wrapper) ERC1155PresetMinterPauser('') {
+  ) VRFV2WrapperConsumerBase(_link, _vrfV2Wrapper) {
     FACTORY = ILootboxFactory(_factory);
     VIEW = _view;
   }
@@ -352,9 +350,9 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @param _owner The admin of the lootbox contract.
   function initialize(string memory _uri, address _owner) external {
     if (msg.sender != address(FACTORY)) revert OnlyFactory();
-    _setupRole(DEFAULT_ADMIN_ROLE, _owner);
-    _setupRole(MINTER_ROLE, _owner);
-    _setupRole(PAUSER_ROLE, _owner);
+    _grantRole(DEFAULT_ADMIN_ROLE, _owner);
+    _grantRole(MINTER_ROLE, _owner);
+    _grantRole(PAUSER_ROLE, _owner);
     _setURI(_uri);
   }
 
@@ -367,8 +365,10 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
     _;
   }
 
-  modifier onlyAdmin() {
-    _checkRole(DEFAULT_ADMIN_ROLE);
+  modifier onlyAdminOrFactory() {
+    if (_msgSender() != address(FACTORY)) {
+      _checkRole(DEFAULT_ADMIN_ROLE);
+    }
     _;
   }
 
@@ -379,13 +379,13 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
 
   /// @notice Sets the URI for the contract.
   /// @param _baseURI The base URI being used.
-  function setURI(string memory _baseURI) external onlyAdmin() {
+  function setURI(string memory _baseURI) external onlyAdminOrFactory() {
     _setURI(_baseURI);
   }
 
   /// @notice Adds loot suppliers.
   /// @param _suppliers An array of loot suppliers being added.
-  function addSuppliers(address[] calldata _suppliers) external onlyAdmin() {
+  function addSuppliers(address[] calldata _suppliers) external onlyAdminOrFactory() {
     for (uint i = 0; i < _suppliers.length; i = _inc(i)) {
       _addSupplier(_suppliers[i]);
     }
@@ -393,7 +393,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
 
   /// @notice Removes contract suppliers.
   /// @param _suppliers An array of suppliers being removed.
-  function removeSuppliers(address[] calldata _suppliers) external onlyAdmin() {
+  function removeSuppliers(address[] calldata _suppliers) external onlyAdminOrFactory() {
     for (uint i = 0; i < _suppliers.length; i = _inc(i)) {
       _removeSupplier(_suppliers[i]);
     }
@@ -401,7 +401,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
 
   /// @notice Adds reward tokens for lootbox usage.
   /// @param _tokens An array of tokens being added.
-  function addTokens(address[] calldata _tokens) external onlyAdmin() {
+  function addTokens(address[] calldata _tokens) external onlyAdminOrFactory() {
     for (uint i = 0; i < _tokens.length; i = _inc(i)) {
       _addToken(_tokens[i]);
     }
@@ -412,7 +412,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @param _tokens An array of tokens being added.
   /// @param _ids An array of ids being added.
   /// @param _amountsPerUnit An array of amounts being added.
-  function setAmountsPerUnit(address[] calldata _tokens, uint[] calldata _ids, uint[] calldata _amountsPerUnit) external notEmergency() onlyAdmin() {
+  function setAmountsPerUnit(address[] calldata _tokens, uint[] calldata _ids, uint[] calldata _amountsPerUnit) external notEmergency() onlyAdminOrFactory() {
     if (_tokens.length != _ids.length || _tokens.length != _amountsPerUnit.length) revert InvalidLength();
     uint currentSupply = unitsSupply;
     for (uint i = 0; i < _tokens.length; i = _inc(i)) {
@@ -422,7 +422,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
     unitsSupply = currentSupply;
   }
 
-  function emergencyWithdraw(address _token, RewardType _type, address _to, uint[] calldata _ids, uint[] calldata _amounts) external onlyAdmin() {
+  function emergencyWithdraw(address _token, RewardType _type, address _to, uint[] calldata _ids, uint[] calldata _amounts) external onlyAdminOrFactory() {
     if (_not(isEmergencyMode)) {
       isEmergencyMode = true;
       emit EmergencyModeEnabled(_msgSender());
@@ -589,7 +589,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @notice Sets the native currency price to buy a lootbox.
   /// @notice Set to 0 to prevent sales.
   /// @param _newPrice An amount of native currency user needs to pay to get a single lootbox.
-  function setPrice(uint _newPrice) external onlyAdmin() {
+  function setPrice(uint _newPrice) external onlyAdminOrFactory() {
     price = _newPrice;
     emit PriceUpdated(_newPrice);
   }
@@ -638,7 +638,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @param _token The token contract address or zero for native currency.
   /// @param _to The receiver address or zero for caller address.
   /// @param _amount The amount of token to withdraw or zero for full amount.
-  function withdraw(address _token, address payable _to, uint _amount) external onlyAdmin() {
+  function withdraw(address _token, address payable _to, uint _amount) external onlyAdminOrFactory() {
     if (_tokenAllowed(_token)) revert RewardWithdrawalDenied(_token);
     if (_to == payable(0)) {
       _to = payable(_msgSender());
@@ -1107,27 +1107,23 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
     public
     view
     virtual
-    override(ERC1155Receiver, ERC1155PresetMinterPauser)
+    override(ERC1155Base, ERC1155Holder)
     returns (bool)
   {
-    return ERC1155Receiver.supportsInterface(interfaceId) ||
-      ERC1155PresetMinterPauser.supportsInterface(interfaceId);
+    return ERC1155Base.supportsInterface(interfaceId) ||
+      ERC1155Holder.supportsInterface(interfaceId);
   }
 
   /// @notice Fires after token transfer.
-  /// @param operator Boolean value.
   /// @param from From address.
   /// @param to To address.
   /// @param ids Id array.
   /// @param amounts Amounts array.
-  /// @param data Data in bytes.
-  function _afterTokenTransfer(
-    address operator,
+  function _update(
     address from,
     address to,
     uint256[] memory ids,
-    uint256[] memory amounts,
-    bytes memory data
+    uint256[] memory amounts
   ) internal virtual override {
     if (from == address(0)) {
       uint unitBoxesAdded = 0;
@@ -1148,12 +1144,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
       }
       unitsMinted = unitsMinted - unitBoxesRemoved;
     }
-    super._afterTokenTransfer(operator, from, to, ids, amounts, data);
-  }
-
-  // @dev Added override for code size optimization.
-  function _checkRole(bytes32 role) internal view override {
-    if (_not(hasRole(role, _msgSender()))) revert AccessDenied(role);
+    super._update(from, to, ids, amounts);
   }
 
   function pause() public override onlyPauser() {

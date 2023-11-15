@@ -24,6 +24,11 @@ const networkConfig = {
     linkToken: '0x84b9B910527Ad5C03A9Ca831909E21e236EA7b06',
     vrfV2Wrapper: '0x699d428ee890d55D56d5FC6e26290f3247A762bd',
   },
+  '421613': {
+    name: 'arbitest',
+    linkToken: '0xd14838A68E8AFBAdE5efb411d5871ea0011AFd28',
+    vrfV2Wrapper: '0x674Cda1Fef7b3aA28c535693D658B42424bb7dBD',
+  },
   '1': {
     name: 'mainnet',
     linkToken: '0x514910771AF9Ca656af840dff83E8264EcF986CA',
