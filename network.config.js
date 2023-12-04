@@ -24,6 +24,11 @@ const networkConfig = {
     linkToken: '0x84b9B910527Ad5C03A9Ca831909E21e236EA7b06',
     vrfV2Wrapper: '0x699d428ee890d55D56d5FC6e26290f3247A762bd',
   },
+  '421613': {
+    name: 'arbitest',
+    linkToken: '0xd14838A68E8AFBAdE5efb411d5871ea0011AFd28',
+    vrfV2Wrapper: '0x674Cda1Fef7b3aA28c535693D658B42424bb7dBD',
+  },
   '1': {
     name: 'mainnet',
     linkToken: '0x514910771AF9Ca656af840dff83E8264EcF986CA',
@@ -34,6 +39,26 @@ const networkConfig = {
     linkToken: '0x514910771AF9Ca656af840dff83E8264EcF986CA',
     linkHolder: '0x40B38765696e3d5d8d9d834D8AaD4bB6e418E489',
     vrfV2Wrapper: '0x5A861794B927983406fCE1D062e00b9368d97Df6',
+  },
+  '250': {
+    name: 'fantom',
+    linkToken: '0x6F43FF82CCA38001B6699a8AC47A2d0E66939407',
+    vrfV2Wrapper: '0xeDA5B00fB33B13c730D004Cf5D1aDa1ac191Ddc2',
+  },
+  '43114': {
+    name: 'avax',
+    linkToken: '0x5947BB275c521040051D82396192181b413227A3',
+    vrfV2Wrapper: '0x721DFbc5Cfe53d32ab00A9bdFa605d3b8E1f3f42',
+  },
+  '137': {
+    name: 'polygon',
+    linkToken: '0xb0897686c545045aFc77CF20eC7A532E3120E0F1',
+    vrfV2Wrapper: '0x4e42f0adEB69203ef7AaA4B7c414e5b1331c14dc',
+  },
+  '56': {
+    name: 'bsc',
+    linkToken: '0x404460C6A5EdE2D891e8297795264fDe62ADBB75',
+    vrfV2Wrapper: '0x721DFbc5Cfe53d32ab00A9bdFa605d3b8E1f3f42',
   },
 };
 

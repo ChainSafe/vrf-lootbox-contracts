@@ -14,11 +14,34 @@ Each function has detail natspec comments for those that know how to read solidi
 
     npm run hardhat docgen
 
-### Usage
+### Deployment
+
+To deploy to live networks, create a `.env` file using the `.env.example` and fill in the relevant variables (only the ones needed for your deployment).
+You need to either have a private key specified or a ledger address and derivation path (if signing transactions with Ledger).
+To deploy to Ethereum Mainnet do:
+
+    npm run hardhat -- --network mainnet deploy-factory
+
+To deploy to other networks, replace the `mainnet` with the network name from the supported list:
+
+    mainnet
+    fantom
+    avax
+    polygon
+    bsc
+    sepolia
+    fantomtest
+    fuji
+    mumbai
+    bsctest
+
+You could optionally set your ETHERSCAN_API key, and use `--verify true` in order to publish the source code after deployemnt. NOTE: Chainlink didn't want to publish the source code yet.
+
+### Integration env and usage
 
 By default everything is executed on the forked network, and no real transactions being sent.
 You can add dev keys to your wallet (like MetaMask) in order to interract with the contracts on the local node.
-The keys are:
+The private keys are:
 
     57b26bc4bcfd781dcab2fbda189bbf9eb124c7084690571ce185294cbb3d010a Deployer
     7bb779a88af05bc9bc0d0a1da4357cced604f545459a532f92c3eb6d42f1900c Supplier

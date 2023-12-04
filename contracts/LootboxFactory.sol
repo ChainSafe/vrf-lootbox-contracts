@@ -73,7 +73,7 @@ contract LootboxFactory is ILootboxFactory, ERC677ReceiverInterface, Ownable {
   constructor(
     address _link,
     address _lootbox
-  ) {
+  ) Ownable(msg.sender) {
     LINK = _link;
     LOOTBOX = _lootbox;
   }
@@ -87,13 +87,40 @@ contract LootboxFactory is ILootboxFactory, ERC677ReceiverInterface, Ownable {
   /// @param _id The id of the lootbox being deployed.
   /// @return address The lootbox address.
   function deployLootbox(string calldata _uri, uint _id) external payable returns (address) {
+    Lootbox lootbox = _deploy(_uri, _id);
+    return address(lootbox);
+  }
+
+
+  /// @notice Deploys a lootbox and performs setup actions.
+  /// @param _uri The uri of the lootbox being deployed.
+  /// @param _id The id of the lootbox being deployed.
+  /// @param _suppliers An array of loot suppliers being added.
+  /// @param _tokens An array of tokens being added.
+  /// @param _buyPrice An amount of native currency user needs to pay to buy a single lootbox.
+  /// @return address The lootbox address.
+  function deployLootboxWithSetup(
+    string calldata _uri,
+    uint _id,
+    address[] calldata _suppliers,
+    address[] calldata _tokens,
+    uint _buyPrice
+  ) external payable returns (address) {
+    Lootbox lootbox = _deploy(_uri, _id);
+    lootbox.addSuppliers(_suppliers);
+    lootbox.addTokens(_tokens);
+    lootbox.setPrice(_buyPrice);
+    return address(lootbox);
+  }
+
+  function _deploy(string memory _uri, uint _id) internal returns(Lootbox) {
     if (msg.value < feePerDeploy) revert InsufficientPayment();
     if (lootboxes[_msgSender()][_id] != address(0)) revert AlreadyDeployed();
     address lootbox = LOOTBOX.cloneDeterministic(keccak256(abi.encodePacked(_msgSender(), _id)));
-    Lootbox(lootbox).initialize(_uri, _msgSender());
     lootboxes[_msgSender()][_id] = lootbox;
+    Lootbox(lootbox).initialize(_uri, _msgSender());
     emit Deployed(lootbox, _msgSender(), msg.value);
-    return lootbox;
+    return Lootbox(lootbox);
   }
 
   /// @notice The default fee to deploy a lootbox.

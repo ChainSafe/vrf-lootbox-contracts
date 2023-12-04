@@ -1,8 +1,9 @@
 const { setBalance } = require('@nomicfoundation/hardhat-network-helpers');
 require('@nomicfoundation/hardhat-toolbox');
 require('hardhat-docgen');
-require("@chainsafe/hardhat-ts-artifact-plugin");
+require('@chainsafe/hardhat-ts-artifact-plugin');
 require('dotenv').config();
+const { LedgerSigner } = require('@anders-t/ethers-ledger');
 const networkConfig = require('./network.config.js');
 const util = require('node:util');
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
@@ -44,16 +45,23 @@ task('deploy-factory', 'Deploys LootboxFactory')
   const { chainId } = network.config;
   assert(chainId, 'Missing network configuration!');
 
-  const [deployer] = await ethers.getSigners();
+  let [deployer] = await ethers.getSigners();
+  if (process.env.LEDGER_ADDRESS) {
+    console.log(`Using ledger ${process.env.LEDGER_PATH || 'default'} derivation path.`);
+    console.log(`Using ledger ${process.env.LEDGER_ADDRESS} address.`);
+    deployer = new LedgerSigner(ethers.provider, process.env.LEDGER_PATH);
+    deployer.address = process.env.LEDGER_ADDRESS;
+  }
+  const { linkToken, vrfV2Wrapper, name } = networkConfig[chainId];
 
-  const { linkToken, vrfV2Wrapper } = networkConfig[chainId];
+  const gasMultiplier = name.includes('arbi') ? 10 : 1;
 
   const nonce = await ethers.provider.getTransactionCount(deployer.address);
   const lootboxAddress = ethers.utils.getContractAddress({from: deployer.address, nonce: nonce + 1});
   const viewAddress = ethers.utils.getContractAddress({from: deployer.address, nonce: nonce + 2});
-  const factory = await deploy('LootboxFactory', deployer, linkToken, lootboxAddress, {nonce});
-  await deploy('Lootbox', deployer, linkToken, vrfV2Wrapper, viewAddress, factory.address, {nonce: nonce + 1});
-  await deploy('LootboxView', deployer, linkToken, vrfV2Wrapper, factory.address, {nonce: nonce + 2});
+  const factory = await deploy('LootboxFactory', deployer, linkToken, lootboxAddress, {nonce, gasLimit: 1500000 * gasMultiplier});
+  await deploy('Lootbox', deployer, linkToken, vrfV2Wrapper, viewAddress, factory.address, {nonce: nonce + 1, gasLimit: 6000000 * gasMultiplier});
+  await deploy('LootboxView', deployer, linkToken, vrfV2Wrapper, factory.address, {nonce: nonce + 2, gasLimit: 3500000 * gasMultiplier});
 
   if (verify === 'true') {
     console.log('Waiting half a minute to start verification');
@@ -71,6 +79,21 @@ task('deploy-factory', 'Deploys LootboxFactory')
       constructorArguments: [linkToken, vrfV2Wrapper, factory.address],
     });
   }
+});
+
+task('transfer-ownership', 'Transfer LootboxFactory ownership')
+.addParam('factory', 'LootboxFactory address')
+.addParam('to', 'Address of the new owner')
+.setAction(async ({ factory, to }) => {
+  const { chainId } = network.config;
+  assert(chainId, 'Missing network configuration!');
+
+  let [deployer] = await ethers.getSigners();
+
+  const lootboxFactory = await ethers.getContractAt('LootboxFactory', factory);
+  const tx = await lootboxFactory.transferOwnership(to);
+
+  console.log(`Ownership transfer: ${tx.hash}`);
 });
 
 // All the following tasks are for testing and development purpuses only.
@@ -467,7 +490,7 @@ module.exports = {
   solidity: {
     version: '0.8.20',
     settings: {
-      optimizer: { enabled: true, runs: 120 },
+      optimizer: { enabled: true, runs: 1000 },
       evmVersion: 'paris',
     },
   },
@@ -500,7 +523,8 @@ module.exports = {
       ],
     },
     mainnet: {
-      url: process.env.MAINNET_URL || 'https://cloudflare-eth.com',
+      chainId: 1,
+      url: process.env.MAINNET_URL || '',
       accounts:
         isSet(process.env.MAINNET_PRIVATE_KEY) ? [process.env.MAINNET_PRIVATE_KEY] : [],
     },
@@ -533,6 +557,40 @@ module.exports = {
       url: process.env.BSCTEST_URL || '',
       accounts:
         isSet(process.env.BSCTEST_PRIVATE_KEY) ? [process.env.BSCTEST_PRIVATE_KEY] : [],
+    },
+    arbitest: {
+      chainId: 421613,
+      url: process.env.ARBITEST_URL || '',
+      accounts:
+        isSet(process.env.ARBITEST_PRIVATE_KEY) ? [process.env.ARBITEST_PRIVATE_KEY] : [],
+    },
+    fantom: {
+      chainId: 250,
+      url: process.env.FANTOM_URL || '',
+      accounts:
+        isSet(process.env.FANTOM_PRIVATE_KEY) ? [process.env.FANTOM_PRIVATE_KEY] : [],
+      ledgerAccounts: isSet(process.env.LEDGER_ADDRESS) ? [process.env.LEDGER_ADDRESS] : [],
+    },
+    avax: {
+      chainId: 43114,
+      url: process.env.AVAX_URL || '',
+      accounts:
+        isSet(process.env.AVAX_PRIVATE_KEY) ? [process.env.AVAX_PRIVATE_KEY] : [],
+      ledgerAccounts: isSet(process.env.LEDGER_ADDRESS) ? [process.env.LEDGER_ADDRESS] : [],
+    },
+    polygon: {
+      chainId: 137,
+      url: process.env.POLYGON_URL || '',
+      accounts:
+        isSet(process.env.POLYGON_PRIVATE_KEY) ? [process.env.POLYGON_PRIVATE_KEY] : [],
+      ledgerAccounts: isSet(process.env.LEDGER_ADDRESS) ? [process.env.LEDGER_ADDRESS] : [],
+    },
+    bsc: {
+      chainId: 56,
+      url: process.env.BSC_URL || '',
+      accounts:
+        isSet(process.env.BSC_PRIVATE_KEY) ? [process.env.BSC_PRIVATE_KEY] : [],
+      ledgerAccounts: isSet(process.env.LEDGER_ADDRESS) ? [process.env.LEDGER_ADDRESS] : [],
     },
   },
   gasReporter: {

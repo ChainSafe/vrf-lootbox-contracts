@@ -6,8 +6,7 @@ import {IERC721} from '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 import {IERC1155} from '@openzeppelin/contracts/token/ERC1155/IERC1155.sol';
 import {IERC721Receiver} from '@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol';
 import {ERC721Holder} from '@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol';
-import {ERC1155PresetMinterPauser} from '@openzeppelin/contracts/token/ERC1155/presets/ERC1155PresetMinterPauser.sol';
-import {ERC1155Holder, ERC1155Receiver} from '@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol';
+import {ERC1155Holder} from '@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import {EnumerableSet} from '@openzeppelin/contracts/utils/structs/EnumerableSet.sol';
 import {SafeCast} from '@openzeppelin/contracts/utils/math/SafeCast.sol';
@@ -16,6 +15,7 @@ import {VRFCoordinatorV2Interface} from '@chainlink/contracts/src/v0.8/interface
 import {ERC677ReceiverInterface} from '@chainlink/contracts/src/v0.8/interfaces/ERC677ReceiverInterface.sol';
 import {VRFV2WrapperInterface} from '@chainlink/contracts/src/v0.8/interfaces/VRFV2WrapperInterface.sol';
 import {VRFV2WrapperConsumerBase} from '@chainlink/contracts/src/v0.8/VRFV2WrapperConsumerBase.sol';
+import {ERC1155Base} from './ERC1155Base.sol';
 import {ILootboxFactory} from './interfaces/ILootboxFactory.sol';
 import {IVRFV2Wrapper, AggregatorV3Interface} from './interfaces/IVRFV2Wrapper.sol';
 
@@ -43,7 +43,7 @@ import {IVRFV2Wrapper, AggregatorV3Interface} from './interfaces/IVRFV2Wrapper.s
 type RewardInfo is uint248; // 8 bytes unitsAvailable | 23 bytes amountPerUnit
 uint constant UNITS_OFFSET = 8 * 23;
 
-contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155PresetMinterPauser {
+contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155Base {
   using SafeERC20 for IERC20;
   using EnumerableSet for EnumerableSet.AddressSet;
   using EnumerableSet for EnumerableSet.UintSet;
@@ -127,7 +127,7 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155PresetMinterPauser {
     address _link,
     address _vrfV2Wrapper,
     address payable _factory
-  ) ERC1155PresetMinterPauser('') {
+  ) {
     FACTORY = ILootboxFactory(_factory);
     LINK_ETH_FEED = IVRFV2Wrapper(_vrfV2Wrapper).LINK_ETH_FEED();
     VRF_V2_WRAPPER = VRFV2WrapperInterface(_vrfV2Wrapper);
@@ -439,7 +439,7 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155PresetMinterPauser {
     public
     view
     virtual
-    override(ERC1155Receiver, ERC1155PresetMinterPauser)
+    override(ERC1155Base, ERC1155Holder)
     returns (bool)
   {
     return false;
