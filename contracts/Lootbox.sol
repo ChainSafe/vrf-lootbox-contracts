@@ -76,7 +76,7 @@ import {LootboxInterface} from './LootboxInterface.sol';
 type RewardInfo is uint248; // 8 bytes unitsAvailable | 23 bytes amountPerUnit
 uint constant UNITS_OFFSET = 8 * 23;
 
-contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC1155Base, Multicall {
+contract Lootbox is ERC721Holder, ERC1155Holder, ERC1155Base, Multicall {
   using SafeERC20 for IERC20;
   using EnumerableSet for EnumerableSet.AddressSet;
   using EnumerableSet for EnumerableSet.UintSet;
@@ -331,16 +331,14 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   //////////////////////////////////////////////////////////////*/
 
   /// @notice Deploys a new Lootbox contract with the given parameters.
-  /// @param _link The ChainLink LINK token address.
-  /// @param _vrfV2Wrapper The ChainLink VRFV2Wrapper contract address.
   /// @param _view The LootboxView contract address.
   /// @param _factory The LootboxFactory contract address.
   constructor(
-    address _link,
-    address _vrfV2Wrapper,
+    address /*_link*/,
+    address /*_vrfV2Wrapper*/,
     address _view,
     address payable _factory
-  ) VRFV2WrapperConsumerBase(_link, _vrfV2Wrapper) {
+  ) {
     FACTORY = ILootboxFactory(_factory);
     VIEW = _view;
   }
@@ -507,24 +505,26 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   //////////////////////////////////////////////////////////////*/
 
   /// @notice Requests a lootbox openning paying with native currency
-  /// @param _gas Gas limit for allocation. Safe estimate is number of reward units multiplied by 100,000 plus 50,000.
   /// @param _lootIds Lootbox ids to open
   /// @param _lootAmounts Lootbox amounts to open
-  function open(uint32 _gas, uint[] calldata _lootIds, uint[] calldata _lootAmounts) external notEmergency() payable {
-    uint vrfPrice = VRF_V2_WRAPPER.calculateRequestPrice(_gas);
-    uint vrfPriceNative = vrfPrice * _getLinkPrice() / LINK_UNIT;
-    if (msg.value < vrfPriceNative) revert InsufficientPayment();
-    uint payment = msg.value - vrfPriceNative;
+  function open(uint32 /*_gas*/, uint[] calldata _lootIds, uint[] calldata _lootAmounts) external payable {
+    openFor(_msgSender(), _lootIds, _lootAmounts);
+  }
+
+  function openFor(address _to, uint[] calldata _lootIds, uint[] calldata _lootAmounts) public payable notEmergency() {
     address opener = _msgSender();
-    uint unitsToGet = _requestOpen(opener, _gas, _lootIds, _lootAmounts);
+    uint unitsToGet = _requestOpen(opener, 100000, _lootIds, _lootAmounts);
+    // The following randomness is not random at all. DO NOT USE if you need fair randomness.
+    fulfillRandomWords(0, uint(keccak256(abi.encodePacked(opener))));
+    _claimRewards(opener, _to);
     uint feePerUnit = FACTORY.feePerUnit(address(this));
     uint feeInNative = feePerUnit * unitsToGet;
-    if (payment < feeInNative) revert InsufficientFee();
+    if (msg.value < feeInNative) revert InsufficientFee();
     if (feeInNative > 0) {
       payable(FACTORY).sendValue(feeInNative);
     }
-    if (payment > feeInNative) {
-      payable(opener).sendValue(payment - feeInNative);
+    if (msg.value > feeInNative) {
+      payable(opener).sendValue(msg.value - feeInNative);
     }
   }
 
@@ -532,7 +532,11 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @notice Claims the rewards for the lootbox openning.
   /// @dev The user must have some rewards allocated.
   /// @param _opener The address of the user that has an allocation after opening.
-  function claimRewards(address _opener) external whenNotPaused() {
+  function claimRewards(address _opener) external {
+    _claimRewards(_opener, _opener);
+  }
+
+  function _claimRewards(address _opener, address _to) internal whenNotPaused() {
     uint ids = allowedTokens.length();
     for (uint i = 0; i < ids; i = _inc(i)) {
       address token = allowedTokens.at(i);
@@ -545,7 +549,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
         }
         info.amount[0] = 0;
         _deAllocate(token, 0, amount);
-        _transferToken(token, rewardType, _opener, 0, amount);
+        _transferToken(token, rewardType, _to, 0, amount);
         _emitClaimed(_opener, token, 0, amount);
       }
       else {
@@ -560,7 +564,7 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
             info.amount[tokenId] = 0;
             _deAllocate(token, tokenId, amount);
           }
-          _transferToken(token, rewardType, _opener, tokenId, amount);
+          _transferToken(token, rewardType, _to, tokenId, amount);
           _emitClaimed(_opener, token, tokenId, amount);
         }
       }
@@ -666,24 +670,13 @@ contract Lootbox is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC11
   /// @notice Requests randomness from Chainlink VRF.
   /// @dev The VRF subscription must be active and sufficient LINK must be available.
   /// @return requestId The ID of the request.
-  function _requestRandomness(uint32 _gas) internal returns (uint256 requestId) {
-    return requestRandomness(
-      _gas,
-      REQUEST_CONFIRMATIONS,
-      NUMWORDS
-    );
+  function _requestRandomness(uint32 /*_gas*/) internal pure returns (uint256 requestId) {
+    return 0;
   }
 
-  /// @inheritdoc VRFV2WrapperConsumerBase
-  function fulfillRandomWords(uint256 requestId, uint256[] memory randomWords) internal override {
-    try this._allocateRewards{gas: gasleft() - 20000}(requestId, randomWords[0]) {
-      emit OpenRequestFulfilled(requestId, randomWords[0]);
-    } catch (bytes memory reason) {
-      Request storage request = requests[requestId];
-      unitsRequested = unitsRequested - request.unitsToGet;
-      request.unitsToGet = 0;
-      emit OpenRequestFailed(requestId, reason);
-    }
+  function fulfillRandomWords(uint256 requestId, uint256 randomness) internal {
+    this._allocateRewards(requestId, randomness);
+    emit OpenRequestFulfilled(requestId, randomness);
   }
 
   /*//////////////////////////////////////////////////////////////

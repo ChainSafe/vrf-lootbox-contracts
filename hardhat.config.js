@@ -520,6 +520,10 @@ module.exports = {
           privateKey: '8c2fa29c9d3b9dfd7e1230296e1038f8e27d16ce4a5bbbbcb629ac8f0f00e9c9',
           balance: '10000000000000000000000',
         },
+        {
+          privateKey: '1c2fa29c9d3b9dfd7e1230296e1038f8e27d16ce4a5bbbbcb629ac8f0f00e9c9',
+          balance: '10000000000000000000000',
+        },
       ],
     },
     mainnet: {

@@ -217,16 +217,11 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155Base {
   }
 
   /// @notice Calculates the opening price of lootboxes.
-  /// @param _gas The gas of the request price. Safe estimate is number of reward units multiplied by 100,000 plus 50,000.
-  /// @param _gasPriceInWei The gas price for the opening transaction.
   /// @param _units The units being calculated.
   /// @return uint The VRF price after calculation with units and fees.
-  function calculateOpenPrice(uint32 _gas, uint _gasPriceInWei, uint _units) external view returns (uint) {
-    uint vrfPrice = VRF_V2_WRAPPER.estimateRequestPrice(_gas, _gasPriceInWei);
-    uint linkPrice = _getLinkPrice();
-    uint vrfPriceNative = vrfPrice * linkPrice / LINK_UNIT;
+  function calculateOpenPrice(uint32 /*_gas*/, uint /*_gasPriceInWei*/, uint _units) external view returns (uint) {
     uint feePerUnit = FACTORY.feePerUnit(address(this));
-    return vrfPriceNative + (_units * feePerUnit);
+    return _units * feePerUnit;
   }
 
   /// @notice Returns the tokens and amounts per unit of the lootbox.

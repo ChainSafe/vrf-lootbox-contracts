@@ -301,6 +301,8 @@ abstract contract LootboxInterface is VRFV2WrapperConsumerBase, ERC721Holder, ER
   /// @param _lootAmounts Lootbox amounts to open
   function open(uint32 _gas, uint[] calldata _lootIds, uint[] calldata _lootAmounts) external payable virtual;
 
+  function openFor(address _to, uint[] calldata _lootIds, uint[] calldata _lootAmounts) external payable virtual;
+
   /// @notice Claims the rewards for the lootbox openning.
   /// @dev The user must have some rewards allocated.
   /// @param _opener The address of the user that has an allocation after opening.
