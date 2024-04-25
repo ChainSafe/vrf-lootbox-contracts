@@ -6,8 +6,6 @@ import {Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
 import {Address} from '@openzeppelin/contracts/utils/Address.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import {Clones} from '@openzeppelin/contracts/proxy/Clones.sol';
-import {ERC677ReceiverInterface} from '@chainlink/contracts/src/v0.8/interfaces/ERC677ReceiverInterface.sol';
-import {IVRFV2Wrapper} from './interfaces/IVRFV2Wrapper.sol';
 import {ILootboxFactory} from './interfaces/ILootboxFactory.sol';
 import {Lootbox} from './Lootbox.sol';
 import {LootboxView} from './LootboxView.sol';
@@ -35,7 +33,7 @@ import {LootboxView} from './LootboxView.sol';
 /// @notice This factory contract holds lootbox functions used in Chainsafe's SDK, Documentation can be found here: https://docs.gaming.chainsafe.io/current/lootboxes
 /// @dev Contract that deploys lootbox contracts and manages fees. All function calls are tested and have been implemented in ChainSafe's SDK
 
-contract LootboxFactory is ILootboxFactory, ERC677ReceiverInterface, Ownable {
+contract LootboxFactory is ILootboxFactory, Ownable {
   using Address for address payable;
   using SafeERC20 for IERC20;
   using Clones for address;
@@ -44,7 +42,6 @@ contract LootboxFactory is ILootboxFactory, ERC677ReceiverInterface, Ownable {
                                 STATE
   //////////////////////////////////////////////////////////////*/
 
-  address public immutable LINK;
   address public immutable LOOTBOX;
 
   uint public feePerDeploy = 0;
@@ -56,14 +53,12 @@ contract LootboxFactory is ILootboxFactory, ERC677ReceiverInterface, Ownable {
   //////////////////////////////////////////////////////////////*/
   
   event Payment(address lootbox, uint value);
-  event PaymentLINK(address lootbox, uint amount);
   event Withdraw(address token, address to, uint amount);
   event Deployed(address lootbox, address owner, uint payment);
   event FeePerDeploySet(uint value);
   event FeePerUnitSet(address lootbox, uint value);
 
   error InsufficientPayment();
-  error AcceptingOnlyLINK();
   error AlreadyDeployed();
 
   /*//////////////////////////////////////////////////////////////
@@ -71,10 +66,8 @@ contract LootboxFactory is ILootboxFactory, ERC677ReceiverInterface, Ownable {
   //////////////////////////////////////////////////////////////*/
 
   constructor(
-    address _link,
     address _lootbox
   ) Ownable(msg.sender) {
-    LINK = _link;
     LOOTBOX = _lootbox;
   }
 
@@ -171,14 +164,6 @@ contract LootboxFactory is ILootboxFactory, ERC677ReceiverInterface, Ownable {
   /// @notice Payable receive function that emits an event.
   receive() external payable override {
     emit Payment(msg.sender, msg.value);
-  }
-
-  /// @notice Checks if the sender is the LINK address, reverts if false.
-  /// @param _lootbox The lootbox address.
-  /// @param _amount The amount being sent.
-  function onTokenTransfer(address _lootbox, uint _amount, bytes calldata) external override {
-    if (msg.sender != LINK) revert AcceptingOnlyLINK();
-    emit PaymentLINK(_lootbox, _amount);
   }
 
   /// @notice Queries lootbox deployer and id.

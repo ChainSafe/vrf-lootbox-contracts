@@ -24,10 +24,11 @@ const networkConfig = {
     linkToken: '0x84b9B910527Ad5C03A9Ca831909E21e236EA7b06',
     vrfV2Wrapper: '0x699d428ee890d55D56d5FC6e26290f3247A762bd',
   },
-  '421613': {
+  '421614': {
     name: 'arbitest',
-    linkToken: '0xd14838A68E8AFBAdE5efb411d5871ea0011AFd28',
-    vrfV2Wrapper: '0x674Cda1Fef7b3aA28c535693D658B42424bb7dBD',
+    linkToken: '0xb1D4538B4571d411F07960EF2838Ce337FE1E80E',
+    vrfV2Wrapper: '0x29576aB8152A09b9DC634804e4aDE73dA1f3a3CC',
+    vrfV2PlusWrapper: '0x29576aB8152A09b9DC634804e4aDE73dA1f3a3CC',
   },
   '1': {
     name: 'mainnet',
@@ -36,9 +37,10 @@ const networkConfig = {
   },
   '31337': {
     name: 'hardhat',
-    linkToken: '0x514910771AF9Ca656af840dff83E8264EcF986CA',
-    linkHolder: '0x40B38765696e3d5d8d9d834D8AaD4bB6e418E489',
-    vrfV2Wrapper: '0x5A861794B927983406fCE1D062e00b9368d97Df6',
+    linkToken: '0xb1D4538B4571d411F07960EF2838Ce337FE1E80E',
+    linkHolder: '0xbc1be4cc8790b0c99cff76100e0e6d01e32c6a2c',
+    vrfV2Wrapper: '0x29576aB8152A09b9DC634804e4aDE73dA1f3a3CC',
+    vrfV2PlusWrapper: '0x29576aB8152A09b9DC634804e4aDE73dA1f3a3CC',
   },
   '250': {
     name: 'fantom',

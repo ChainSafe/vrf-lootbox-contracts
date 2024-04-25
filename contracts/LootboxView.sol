@@ -11,13 +11,9 @@ import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {EnumerableSet} from '@openzeppelin/contracts/utils/structs/EnumerableSet.sol';
 import {SafeCast} from '@openzeppelin/contracts/utils/math/SafeCast.sol';
 import {Address} from '@openzeppelin/contracts/utils/Address.sol';
-import {VRFCoordinatorV2Interface} from '@chainlink/contracts/src/v0.8/interfaces/VRFCoordinatorV2Interface.sol';
-import {ERC677ReceiverInterface} from '@chainlink/contracts/src/v0.8/interfaces/ERC677ReceiverInterface.sol';
-import {VRFV2WrapperInterface} from '@chainlink/contracts/src/v0.8/interfaces/VRFV2WrapperInterface.sol';
-import {VRFV2WrapperConsumerBase} from '@chainlink/contracts/src/v0.8/VRFV2WrapperConsumerBase.sol';
+import {IVRFV2PlusWrapper} from './interfaces/IVRFV2PlusWrapper.sol';
 import {ERC1155Base} from './ERC1155Base.sol';
 import {ILootboxFactory} from './interfaces/ILootboxFactory.sol';
-import {IVRFV2Wrapper, AggregatorV3Interface} from './interfaces/IVRFV2Wrapper.sol';
 
 //  $$$$$$\  $$\   $$\  $$$$$$\  $$$$$$\ $$\   $$\  $$$$$$\   $$$$$$\  $$$$$$$$\ $$$$$$$$\ 
 // $$  __$$\ $$ |  $$ |$$  __$$\ \_$$  _|$$$\  $$ |$$  __$$\ $$  __$$\ $$  _____|$$  _____|
@@ -75,10 +71,7 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155Base {
   }
 
   ILootboxFactory public immutable FACTORY;
-  AggregatorV3Interface public immutable LINK_ETH_FEED;
-  VRFV2WrapperInterface public immutable VRF_V2_WRAPPER;
-  address public immutable LINK;
-  uint private constant LINK_UNIT = 1e18;
+  IVRFV2PlusWrapper public immutable VRF_V2_PLUS_WRAPPER;
 
   uint public unitsSupply; // Supply of units.
   uint public unitsRequested; // Amount of units requested for opening.
@@ -94,12 +87,12 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155Base {
   mapping(address => mapping(address => AllocationInfo)) private allocationInfo; // Claimer => Token => Info.
   mapping(address => EnumerableSet.UintSet) private extraIds; // ERC1155 internal token ids ever touching the lootbox.
 
-  /// @notice LINK price must be positive from an oracle
-  error InvalidLinkPrice(int value);
-
   /*//////////////////////////////////////////////////////////////
                              VRF RELATED
   //////////////////////////////////////////////////////////////*/
+
+  /// @notice The number of random words to request
+  uint32 private constant NUMWORDS = 1;
 
   /// @notice The VRF request struct
   struct Request {
@@ -120,18 +113,14 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155Base {
   //////////////////////////////////////////////////////////////*/
 
   /// @notice Deploys a new Lootbox contract with the given parameters.
-  /// @param _link The ChainLink LINK token address.
-  /// @param _vrfV2Wrapper The ChainLink VRFV2Wrapper contract address.
+  /// @param _vrfV2PlusWrapper The ChainLink VRFV2PlusWrapper contract address.
   /// @param _factory The LootboxFactory contract address.
   constructor(
-    address _link,
-    address _vrfV2Wrapper,
+    address _vrfV2PlusWrapper,
     address payable _factory
   ) {
     FACTORY = ILootboxFactory(_factory);
-    LINK_ETH_FEED = IVRFV2Wrapper(_vrfV2Wrapper).LINK_ETH_FEED();
-    VRF_V2_WRAPPER = VRFV2WrapperInterface(_vrfV2Wrapper);
-    LINK = _link;
+    VRF_V2_PLUS_WRAPPER = IVRFV2PlusWrapper(_vrfV2PlusWrapper);
   }
 
   /*//////////////////////////////////////////////////////////////
@@ -222,9 +211,7 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155Base {
   /// @param _units The units being calculated.
   /// @return uint The VRF price after calculation with units and fees.
   function calculateOpenPrice(uint32 _gas, uint _gasPriceInWei, uint _units) external view returns (uint) {
-    uint vrfPrice = VRF_V2_WRAPPER.estimateRequestPrice(_gas, _gasPriceInWei);
-    uint linkPrice = _getLinkPrice();
-    uint vrfPriceNative = vrfPrice * linkPrice / LINK_UNIT;
+    uint vrfPriceNative = VRF_V2_PLUS_WRAPPER.estimateRequestPriceNative(_gas, NUMWORDS, _gasPriceInWei);
     uint feePerUnit = FACTORY.feePerUnit(address(this));
     return vrfPriceNative + (_units * feePerUnit);
   }
@@ -362,22 +349,6 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155Base {
     return requests[requestId];
   }
 
-  /// @notice Gets the LINK token address.
-  /// @return address The address of the LINK token.
-  function getLink() external view returns (address) {
-    return address(LINK);
-  }
-
-  /// @notice Gets the VRF wrapper for the contract.
-  /// @return address The address of the VRF wrapper.
-  function getVRFV2Wrapper() external view returns (address) {
-    return address(VRF_V2_WRAPPER);
-  }
-
-  function getLinkPrice() external view returns (uint) {
-    return _getLinkPrice();
-  }
-
   /// @notice Checks the balance of an erc20 token.
   /// @param _token The token being checked.
   /// @return uint erc20 token balance, else 0 if not an erc20 token.
@@ -388,15 +359,6 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155Base {
       // not an ERC20 so has to transfer first.
       return 0;
     }
-  }
-
-  /// @notice Gets LINK price.
-  /// @return uint The link price from wei converted to uint.
-  function _getLinkPrice() internal view returns (uint) {
-    int256 weiPerUnitLink;
-    (, weiPerUnitLink, , , ) = LINK_ETH_FEED.latestRoundData();
-    if (weiPerUnitLink <= 0) revert InvalidLinkPrice(weiPerUnitLink);
-    return uint(weiPerUnitLink);
   }
 
   /// @notice Checks units by by reward information.

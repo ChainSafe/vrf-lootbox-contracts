@@ -1,7 +1,7 @@
 const { loadFixture, setCode } = require('@nomicfoundation/hardhat-network-helpers');
 const { anyValue } = require('@nomicfoundation/hardhat-chai-matchers/withArgs');
 const { expect } = require('chai');
-const { linkToken, vrfV2Wrapper, linkHolder } = require('../network.config.js')['31337'];
+const { linkToken, vrfV2PlusWrapper, linkHolder } = require('../network.config.js')['31337'];
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
@@ -14,15 +14,15 @@ describe('LootboxFactory', function () {
   };
 
   const deployFactory = async (linkAddress, wrapperAddress) => {
-    wrapperAddress = wrapperAddress || vrfV2Wrapper;
+    wrapperAddress = wrapperAddress || vrfV2PlusWrapper;
     const [deployer, supplier, user] = await ethers.getSigners();
     const link = await ethers.getContractAt('LinkTokenInterface', linkAddress || linkToken);
     const nonce = await ethers.provider.getTransactionCount(deployer.address);
     const lootboxAddress = ethers.utils.getContractAddress({from: deployer.address, nonce: nonce + 1});
     const viewAddress = ethers.utils.getContractAddress({from: deployer.address, nonce: nonce + 2});
-    const factory = await deploy('LootboxFactory', deployer, link.address, lootboxAddress, {nonce});
-    await deploy('Lootbox', deployer, link.address, wrapperAddress, viewAddress, factory.address, {nonce: nonce + 1});
-    await deploy('LootboxView', deployer, link.address, wrapperAddress, factory.address, {nonce: nonce + 2});
+    const factory = await deploy('LootboxFactory', deployer, lootboxAddress, {nonce});
+    await deploy('Lootbox', deployer, wrapperAddress, viewAddress, factory.address, {nonce: nonce + 1});
+    await deploy('LootboxView', deployer, wrapperAddress, factory.address, {nonce: nonce + 2});
 
     await factory.deployed();
     const impersonatedLinkHolder = await ethers.getImpersonatedSigner(linkHolder);
@@ -38,13 +38,11 @@ describe('LootboxFactory', function () {
 
   it('should deploy lootbox factory and have valid defaults', async function () {
     const { factory } = await loadFixture(deployFactory);
-    expect(await factory.LINK()).to.equal(linkToken);
     expect(await factory.feePerDeploy()).to.equal(0);
     expect(await factory.defaultFeePerUnit()).to.equal(0);
     const [someone, another] = await ethers.getSigners();
-    await setCode(another.address, await ethers.provider.getCode(vrfV2Wrapper));
+    await setCode(another.address, await ethers.provider.getCode(vrfV2PlusWrapper));
     const { factory: factory2 } = await deployFactory(someone.address, another.address);
-    expect(await factory2.LINK()).to.equal(someone.address);
   });
   it('should allow owner to set fee per deploy', async function () {
     const { factory } = await loadFixture(deployFactory);
@@ -183,35 +181,6 @@ describe('LootboxFactory', function () {
       .to.changeEtherBalance(factory.address, 0)
       .to.emit(factory, 'Payment')
       .withArgs(user.address, 0);
-  });
-  it('should allow receiving LINK through ERC677 and emit a PaymentLINK event', async function () {
-    const { factory, link } = await loadFixture(deployFactory);
-    const [owner, other, user] = await ethers.getSigners();
-    await expect(link.transferAndCall(factory.address, 200, '0x'))
-      .to.changeTokenBalance(link, factory.address, 200)
-      .to.changeTokenBalance(link, owner.address, -200)
-      .to.emit(factory, 'PaymentLINK')
-      .withArgs(owner.address, 200);
-    await expect(link.connect(other).transferAndCall(factory.address, 100, '0x'))
-      .to.changeTokenBalance(link, factory.address, 100)
-      .to.changeTokenBalance(link, other.address, -100)
-      .to.emit(factory, 'PaymentLINK')
-      .withArgs(other.address, 100);
-    await expect(link.connect(user).transferAndCall(factory.address, 0, '0x11'))
-      .to.changeTokenBalance(link, factory.address, 0)
-      .to.changeTokenBalance(link, user.address, 0)
-      .to.emit(factory, 'PaymentLINK')
-      .withArgs(user.address, 0);
-  });
-  it('should restrict receiving other tokens through ERC677', async function () {
-    const { factory, link } = await loadFixture(deployFactory);
-    const [owner, other, user] = await ethers.getSigners();
-    await expect(factory.onTokenTransfer(other.address, 50, '0x'))
-      .to.be.revertedWithCustomError(factory, 'AcceptingOnlyLINK');
-    await expect(factory.onTokenTransfer(owner.address, 50, '0x11'))
-      .to.be.revertedWithCustomError(factory, 'AcceptingOnlyLINK');
-    await expect(factory.connect(user).onTokenTransfer(other.address, 100, '0x11'))
-      .to.be.revertedWithCustomError(factory, 'AcceptingOnlyLINK');
   });
   it('should allow deploying lootboxes when fee is zero', async function () {
     const { factory, link } = await loadFixture(deployFactory);

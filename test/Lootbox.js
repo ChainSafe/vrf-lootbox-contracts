@@ -3,7 +3,7 @@ const { anyValue } = require('@nomicfoundation/hardhat-chai-matchers/withArgs');
 const sort = require('sort-any');
 const chai = require('chai');
 const { expect } = chai;
-const { linkToken, vrfV2Wrapper, linkHolder } = require('../network.config.js')['31337'];
+const { linkToken, vrfV2PlusWrapper, linkHolder } = require('../network.config.js')['31337'];
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const LINK_UNIT = '1000000000000000000';
@@ -36,15 +36,15 @@ describe('Lootbox', function () {
   };
 
   const deployLootbox = async (linkAddress, wrapperAddress) => {
-    const wrapper = wrapperAddress || vrfV2Wrapper;
+    const wrapper = wrapperAddress || vrfV2PlusWrapper;
     const [owner, supplier, user] = await ethers.getSigners();
     const link = await ethers.getContractAt('LinkTokenInterface', linkAddress || linkToken);
     const nonce = await ethers.provider.getTransactionCount(owner.address);
     const lootboxAddress = ethers.utils.getContractAddress({from: owner.address, nonce: nonce + 1});
     const viewAddress = ethers.utils.getContractAddress({from: owner.address, nonce: nonce + 2});
-    const factory = await deploy('LootboxFactory', owner, link.address, lootboxAddress, {nonce});
-    await deploy('Lootbox', owner, link.address, wrapper, viewAddress, factory.address, {nonce: nonce + 1});
-    await deploy('LootboxView', owner, link.address, wrapper, factory.address, {nonce: nonce + 2});
+    const factory = await deploy('LootboxFactory', owner, lootboxAddress, {nonce});
+    await deploy('Lootbox', owner, wrapper, viewAddress, factory.address, {nonce: nonce + 1});
+    await deploy('LootboxView', owner, wrapper, factory.address, {nonce: nonce + 2});
 
     const impersonatedLinkHolder = await ethers.getImpersonatedSigner(linkHolder);
     await link.connect(impersonatedLinkHolder)
@@ -57,12 +57,8 @@ describe('Lootbox', function () {
     await factory.deployLootbox('someUri', 0);
     const deployedLootbox = await factory.getLootbox(owner.address, 0);
     const lootbox = await ethers.getContractAt('LootboxInterface', deployedLootbox);
-    const ethLinkFeedAddress = await lootbox.LINK_ETH_FEED();
-    const ethLinkFeed = await ethers.getContractAt('AggregatorV3Interface', ethLinkFeedAddress);
-    const ethLinkPrice = (await ethLinkFeed.latestRoundData())[1];
-    const vrfWrapper = await ethers.getContractAt('IVRFV2Wrapper', wrapper);
-    const vrfPrice1M = await vrfWrapper.estimateRequestPrice(REQUEST_GAS_LIMIT, network.config.gasPrice);
-    const vrfCoordinator = await ethers.getImpersonatedSigner(await vrfWrapper.COORDINATOR());
+    const vrfWrapper = await ethers.getContractAt('IVRFV2PlusWrapper', wrapper);
+    const vrfCoordinator = await ethers.getImpersonatedSigner(await vrfWrapper.s_vrfCoordinator());
     const vrfWrapperSigner = await ethers.getImpersonatedSigner(vrfWrapper.address);
     await setBalance(vrfCoordinator.address, ethers.utils.parseUnits('100'));
     await setBalance(vrfWrapperSigner.address, ethers.utils.parseUnits('100'));
@@ -77,7 +73,7 @@ describe('Lootbox', function () {
     const erc1155NFT = await deploy('MockERC1155NFT', supplier, 15);
 
     return { factory, lootbox, link, ADMIN, MINTER, PAUSER,
-      erc20, erc721, erc1155, erc1155NFT, ethLinkPrice, vrfPrice1M,
+      erc20, erc721, erc1155, erc1155NFT,
       vrfWrapper, vrfCoordinator, vrfWrapperSigner };
   };
 
@@ -150,12 +146,8 @@ describe('Lootbox', function () {
   it('should deploy lootbox and have valid defaults', async function () {
     const { lootbox, factory, ADMIN, MINTER, PAUSER } = await loadFixture(deployLootbox);
     const [owner] = await ethers.getSigners();
-    expect(await lootbox.getLink()).to.equal(linkToken);
-    expect(await lootbox.getVRFV2Wrapper()).to.equal(vrfV2Wrapper);
     expect(await lootbox.uri(0)).to.equal('someUri');
     expect(await lootbox.FACTORY()).to.equal(factory.address);
-    const wrapper = await ethers.getContractAt('IVRFV2Wrapper', vrfV2Wrapper);
-    expect(await lootbox.LINK_ETH_FEED()).to.equal(await wrapper.LINK_ETH_FEED());
     await expectRoleMembers(lootbox, ADMIN, [owner.address]);
     await expectRoleMembers(lootbox, MINTER, [owner.address]);
     await expectRoleMembers(lootbox, PAUSER, [owner.address]);
@@ -2596,16 +2588,6 @@ describe('Lootbox', function () {
     await expectLootboxTypes(lootbox, [3, 1, 2, 4]);
   });
 
-  it('should calculate open price based on the gas, VRF and LINK price and fee per unit', async function () {
-    const { lootbox, ethLinkPrice, vrfPrice1M, factory } = await loadFixture(deployLootbox);
-    const expectedVRFPrice = vrfPrice1M.mul(ethLinkPrice).div(LINK_UNIT);
-    expect(await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 0)).to.equal(expectedVRFPrice);
-    expect(await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 10)).to.equal(expectedVRFPrice);
-    await factory.setFeePerUnit(lootbox.address, 1000);
-    expect(await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 0)).to.equal(expectedVRFPrice);
-    expect(await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 10)).to.equal(expectedVRFPrice.add('10000'));
-  });
-
   it('should recover lootboxes from an own failed open request', async function () {
     const { lootbox, erc20, link,
       vrfWrapper, vrfCoordinator, vrfWrapperSigner } = await loadFixture(deployLootbox);
@@ -3298,7 +3280,7 @@ describe('Lootbox', function () {
     await expect(lootbox._allocateRewards(requestId, 7))
       .to.be.revertedWithCustomError(lootbox, 'OnlyThis');
   });
-  it('should restrict calling raw fulfill random words for not the VRF_V2_WRAPPER', async function () {
+  it('should restrict calling raw fulfill random words for not the VRF_V2_PLUS_WRAPPER', async function () {
     const { lootbox, erc20, erc721, erc1155NFT, erc1155, link,
       vrfWrapper, vrfCoordinator, vrfWrapperSigner } = await loadFixture(deployLootbox);
     const [owner, supplier, user] = await ethers.getSigners();
@@ -3320,7 +3302,7 @@ describe('Lootbox', function () {
     await lootbox.connect(user).open(notEnoughGas, [1, 2], [4, 3], {value: price});
     let requestId = await lootbox.openerRequests(user.address);
     await expect(lootbox.rawFulfillRandomWords(requestId, [7]))
-      .to.be.revertedWith(/fulfill/);
+      .to.be.revertedWithCustomError(lootbox, 'OnlyVRFWrapperCanFulfill');
   });
   it('should restrict rewards allocation for a failed request', async function () {
     const { lootbox, erc20, erc721, erc1155NFT, erc1155, link,
@@ -3457,7 +3439,7 @@ describe('Lootbox', function () {
 
   describe('Native currency payment', function() {
     it('should allow native currency payment to create an open request', async function () {
-      const { lootbox, erc20, link, vrfPrice1M, factory } = await loadFixture(deployLootbox);
+      const { lootbox, erc20, link, factory } = await loadFixture(deployLootbox);
       const [owner, supplier, user] = await ethers.getSigners();
       await lootbox.mint(user.address, 1, 1, '0x');
       await lootbox.addTokens([erc20.address]);
@@ -3475,8 +3457,7 @@ describe('Lootbox', function () {
       expect(requestId).to.not.equal(0);
       await expect(tx).to.changeEtherBalance(user.address, price.mul('-1'));
       await expect(tx).to.changeEtherBalance(factory.address, 0);
-      await expect(tx).to.changeEtherBalance(lootbox.address, price);
-      await expect(tx).to.changeTokenBalance(link, lootbox.address, vrfPrice1M.mul('-1'));
+      await expect(tx).to.changeEtherBalance(lootbox.address, 0);
     });
     it('should restrict native currency deposit outside of open function', async function () {
       const { lootbox } = await loadFixture(deployLootbox);
@@ -3522,7 +3503,7 @@ describe('Lootbox', function () {
       const tx = lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1], [1], {value: price});
       await expect(tx).to.changeEtherBalance(user.address, price.mul('-1'));
       await expect(tx).to.changeEtherBalance(factory.address, 1);
-      await expect(tx).to.changeEtherBalance(lootbox.address, price.sub('1'));
+      await expect(tx).to.changeEtherBalance(lootbox.address, 0);
     });
     it('should not forward a zero native fee in to the factory when creating an open request', async function () {
       const { lootbox, erc20, link, factory } = await loadFixture(deployLootbox);

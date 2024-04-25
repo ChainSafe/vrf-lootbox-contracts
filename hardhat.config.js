@@ -46,37 +46,39 @@ task('deploy-factory', 'Deploys LootboxFactory')
   assert(chainId, 'Missing network configuration!');
 
   let [deployer] = await ethers.getSigners();
+  console.log(deployer.address);
   if (process.env.LEDGER_ADDRESS) {
     console.log(`Using ledger ${process.env.LEDGER_PATH || 'default'} derivation path.`);
     console.log(`Using ledger ${process.env.LEDGER_ADDRESS} address.`);
     deployer = new LedgerSigner(ethers.provider, process.env.LEDGER_PATH);
     deployer.address = process.env.LEDGER_ADDRESS;
   }
-  const { linkToken, vrfV2Wrapper, name } = networkConfig[chainId];
+  const { linkToken, vrfV2PlusWrapper, name } = networkConfig[chainId];
 
-  const gasMultiplier = name.includes('arbi') ? 10 : 1;
+  // const gasMultiplier = name.includes('arbi') ? 10 : 1;
+  const gasMultiplier = 1;
 
   const nonce = await ethers.provider.getTransactionCount(deployer.address);
   const lootboxAddress = ethers.utils.getContractAddress({from: deployer.address, nonce: nonce + 1});
   const viewAddress = ethers.utils.getContractAddress({from: deployer.address, nonce: nonce + 2});
-  const factory = await deploy('LootboxFactory', deployer, linkToken, lootboxAddress, {nonce, gasLimit: 1500000 * gasMultiplier});
-  await deploy('Lootbox', deployer, linkToken, vrfV2Wrapper, viewAddress, factory.address, {nonce: nonce + 1, gasLimit: 6000000 * gasMultiplier});
-  await deploy('LootboxView', deployer, linkToken, vrfV2Wrapper, factory.address, {nonce: nonce + 2, gasLimit: 3500000 * gasMultiplier});
+  const factory = await deploy('LootboxFactory', deployer, lootboxAddress, {nonce, gasLimit: 1500000 * gasMultiplier});
+  await deploy('Lootbox', deployer, vrfV2PlusWrapper, viewAddress, factory.address, {nonce: nonce + 1, gasLimit: 6000000 * gasMultiplier});
+  await deploy('LootboxView', deployer, vrfV2PlusWrapper, factory.address, {nonce: nonce + 2, gasLimit: 3500000 * gasMultiplier});
 
   if (verify === 'true') {
     console.log('Waiting half a minute to start verification');
     await sleep(30000);
     await hre.run('verify:verify', {
       address: factory.address,
-      constructorArguments: [linkToken, lootboxAddress],
+      constructorArguments: [lootboxAddress],
     });
     await hre.run('verify:verify', {
       address: lootboxAddress,
-      constructorArguments: [linkToken, vrfV2Wrapper, viewAddress, factory.address],
+      constructorArguments: [vrfV2PlusWrapper, viewAddress, factory.address],
     });
     await hre.run('verify:verify', {
       address: viewAddress,
-      constructorArguments: [linkToken, vrfV2Wrapper, factory.address],
+      constructorArguments: [vrfV2PlusWrapper, factory.address],
     });
   }
 });
@@ -505,7 +507,7 @@ module.exports = {
       gasPrice: 100000000000,
       gas: 20000000,
       forking: {
-        url: 'https://cloudflare-eth.com',
+        url: process.env.ARBITEST_URL,
       },
       accounts: [
         {
@@ -559,7 +561,7 @@ module.exports = {
         isSet(process.env.BSCTEST_PRIVATE_KEY) ? [process.env.BSCTEST_PRIVATE_KEY] : [],
     },
     arbitest: {
-      chainId: 421613,
+      chainId: 421614,
       url: process.env.ARBITEST_URL || '',
       accounts:
         isSet(process.env.ARBITEST_PRIVATE_KEY) ? [process.env.ARBITEST_PRIVATE_KEY] : [],
@@ -594,7 +596,7 @@ module.exports = {
     },
   },
   gasReporter: {
-    enabled: isSet(process.env.REPORT_GAS),
+    enabled: process.env.REPORT_GAS == "true",
     currency: 'USD',
   },
   etherscan: {
