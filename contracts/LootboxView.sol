@@ -129,9 +129,10 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155Base {
     address payable _factory
   ) {
     FACTORY = ILootboxFactory(_factory);
-    LINK_ETH_FEED = IVRFV2Wrapper(_vrfV2Wrapper).LINK_ETH_FEED();
-    VRF_V2_WRAPPER = VRFV2WrapperInterface(_vrfV2Wrapper);
-    LINK = _link;
+    // LINK_ETH_FEED = IVRFV2Wrapper(_vrfV2Wrapper).LINK_ETH_FEED();
+    LINK_ETH_FEED = AggregatorV3Interface(address(0));
+    VRF_V2_WRAPPER = VRFV2WrapperInterface(address(0));
+    LINK = address(0);
   }
 
   /*//////////////////////////////////////////////////////////////

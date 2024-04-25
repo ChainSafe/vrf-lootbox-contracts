@@ -60,6 +60,11 @@ const networkConfig = {
     linkToken: '0x404460C6A5EdE2D891e8297795264fDe62ADBB75',
     vrfV2Wrapper: '0x721DFbc5Cfe53d32ab00A9bdFa605d3b8E1f3f42',
   },
+  '338': {
+    name: 'cronos-testnet',
+    linkToken: '0x0000000000000000000000000000000000000000',
+    vrfV2Wrapper: '0x0000000000000000000000000000000000000000',
+  },
 };
 
 module.exports = networkConfig;

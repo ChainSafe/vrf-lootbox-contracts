@@ -59,12 +59,14 @@ describe('Lootbox', function () {
     const lootbox = await ethers.getContractAt('LootboxInterface', deployedLootbox);
     const ethLinkFeedAddress = await lootbox.LINK_ETH_FEED();
     const ethLinkFeed = await ethers.getContractAt('AggregatorV3Interface', ethLinkFeedAddress);
-    const ethLinkPrice = (await ethLinkFeed.latestRoundData())[1];
+    // const ethLinkPrice = (await ethLinkFeed.latestRoundData())[1];
+    const ethLinkPrice = 1n;
     const vrfWrapper = await ethers.getContractAt('IVRFV2Wrapper', wrapper);
-    const vrfPrice1M = await vrfWrapper.estimateRequestPrice(REQUEST_GAS_LIMIT, network.config.gasPrice);
-    const vrfCoordinator = await ethers.getImpersonatedSigner(await vrfWrapper.COORDINATOR());
+    // const vrfPrice1M = await vrfWrapper.estimateRequestPrice(REQUEST_GAS_LIMIT, network.config.gasPrice);
+    const vrfPrice1M = 1n;
+    // const vrfCoordinator = await ethers.getImpersonatedSigner(await vrfWrapper.COORDINATOR());
     const vrfWrapperSigner = await ethers.getImpersonatedSigner(vrfWrapper.address);
-    await setBalance(vrfCoordinator.address, ethers.utils.parseUnits('100'));
+    // await setBalance(vrfCoordinator.address, ethers.utils.parseUnits('100'));
     await setBalance(vrfWrapperSigner.address, ethers.utils.parseUnits('100'));
 
     const ADMIN = await lootbox.DEFAULT_ADMIN_ROLE();
@@ -78,7 +80,7 @@ describe('Lootbox', function () {
 
     return { factory, lootbox, link, ADMIN, MINTER, PAUSER,
       erc20, erc721, erc1155, erc1155NFT, ethLinkPrice, vrfPrice1M,
-      vrfWrapper, vrfCoordinator, vrfWrapperSigner };
+      vrfWrapper, /*vrfCoordinator, */vrfWrapperSigner };
   };
 
   const expectRoleMembers = async (lootbox, role, expected) => {
@@ -2734,7 +2736,7 @@ describe('Lootbox', function () {
     const erc721extra = await deploy('MockERC721', supplier, 20);
     const erc1155extra = await deploy('MockERC1155', supplier, 10, 1000);
     const erc1155NFTextra = await deploy('MockERC1155NFT', supplier, 15);
-    await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
+    // await link.transfer(lootbox.address, ethers.utils.parseUnits('1000'));
     await lootbox.mintBatch(user.address, [1, 2], [4, 3], '0x');
     await lootbox.addTokens([erc20.address, erc721.address, erc1155NFT.address, erc1155.address]);
     await lootbox.addTokens([erc20extra.address, erc721extra.address, erc1155NFTextra.address, erc1155extra.address]);
@@ -2761,6 +2763,7 @@ describe('Lootbox', function () {
       [erc1155extra.address, erc1155extra.address],
       [4, 5], [0, 0]
     );
+    console.log(REQUEST_GAS_LIMIT, network.config.gasPrice, 3);
     let price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 3);
     let tx = await lootbox.connect(user).openFor(user2.address, [1, 2], [1, 1], {value: price});
     await expectContractEvents(tx, lootbox, [

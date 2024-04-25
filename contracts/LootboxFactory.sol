@@ -74,7 +74,7 @@ contract LootboxFactory is ILootboxFactory, ERC677ReceiverInterface, Ownable {
     address _link,
     address _lootbox
   ) Ownable(msg.sender) {
-    LINK = _link;
+    LINK = address(0);
     LOOTBOX = _lootbox;
   }
 

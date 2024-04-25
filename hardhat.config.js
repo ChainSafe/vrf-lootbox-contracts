@@ -502,10 +502,11 @@ module.exports = {
     },
     hardhat: {
       allowUnlimitedContractSize: true,
-      gasPrice: 100000000000,
+      // gasPrice: 100000000000,
       gas: 20000000,
       forking: {
         url: 'https://cloudflare-eth.com',
+        // url: process.env.CRONOS_TESTNET_URL,
       },
       accounts: [
         {
@@ -594,6 +595,13 @@ module.exports = {
       url: process.env.BSC_URL || '',
       accounts:
         isSet(process.env.BSC_PRIVATE_KEY) ? [process.env.BSC_PRIVATE_KEY] : [],
+      ledgerAccounts: isSet(process.env.LEDGER_ADDRESS) ? [process.env.LEDGER_ADDRESS] : [],
+    },
+    'cronos-testnet': {
+      chainId: 338,
+      url: process.env.CRONOS_TESTNET_URL || "",
+      accounts:
+        isSet(process.env.CRONOS_TESTNET_PRIVATE_KEY) ? [process.env.CRONOS_TESTNET_PRIVATE_KEY] : [],
       ledgerAccounts: isSet(process.env.LEDGER_ADDRESS) ? [process.env.LEDGER_ADDRESS] : [],
     },
   },
