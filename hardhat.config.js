@@ -548,11 +548,11 @@ module.exports = {
       accounts:
         isSet(process.env.FUJI_PRIVATE_KEY) ? [process.env.FUJI_PRIVATE_KEY] : [],
     },
-    mumbai: {
-      chainId: 80001,
-      url: process.env.MUMBAI_URL || '',
+    amoy: {
+      chainId: 80002,
+      url: process.env.AMOY_URL || '',
       accounts:
-        isSet(process.env.MUMBAI_PRIVATE_KEY) ? [process.env.MUMBAI_PRIVATE_KEY] : [],
+        isSet(process.env.AMOY_PRIVATE_KEY) ? [process.env.AMOY_PRIVATE_KEY] : [],
     },
     bsctest: {
       chainId: 97,
@@ -601,6 +601,24 @@ module.exports = {
   },
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY,
+    customChains: [
+      {
+        network: "arbitest",
+        chainId: 421614,
+        urls: {
+          apiURL: "https://api-sepolia.arbiscan.io/api",
+          browserURL: "https://sepolia.arbiscan.io"
+        }
+      },
+      {
+        network: "amoy",
+        chainId: 80002,
+        urls: {
+          apiURL: "https://api-amoy.polygonscan.com/api",
+          browserURL: "https://amoy.polygonscan.com"
+        }
+      }
+    ]
   },
   docgen: {
     path: './docs',

@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
-import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Pausable.sol";
-import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Burnable.sol";
+import '@openzeppelin/contracts/token/ERC1155/ERC1155.sol';
+import '@openzeppelin/contracts/access/AccessControl.sol';
+import '@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Pausable.sol';
+import '@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Burnable.sol';
 
 contract ERC1155Base is AccessControl, ERC1155, ERC1155Pausable, ERC1155Burnable {
-    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
-    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    bytes32 public constant PAUSER_ROLE = keccak256('PAUSER_ROLE');
+    bytes32 public constant MINTER_ROLE = keccak256('MINTER_ROLE');
 
-    constructor() ERC1155("") {}
+    constructor() ERC1155('') {}
 
     function pause() public virtual onlyRole(PAUSER_ROLE) {
         _pause();
