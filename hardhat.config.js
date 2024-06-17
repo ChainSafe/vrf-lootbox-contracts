@@ -46,13 +46,13 @@ task('deploy-factory', 'Deploys LootboxFactory')
   assert(chainId, 'Missing network configuration!');
 
   let [deployer] = await ethers.getSigners();
-  console.log(deployer.address);
   if (process.env.LEDGER_ADDRESS) {
     console.log(`Using ledger ${process.env.LEDGER_PATH || 'default'} derivation path.`);
     console.log(`Using ledger ${process.env.LEDGER_ADDRESS} address.`);
     deployer = new LedgerSigner(ethers.provider, process.env.LEDGER_PATH);
     deployer.address = process.env.LEDGER_ADDRESS;
   }
+  console.log('Deployer:', deployer.address);
   const { linkToken, vrfV2PlusWrapper, name } = networkConfig[chainId];
 
   // const gasMultiplier = name.includes('arbi') ? 10 : 1;
@@ -65,9 +65,10 @@ task('deploy-factory', 'Deploys LootboxFactory')
   await deploy('Lootbox', deployer, vrfV2PlusWrapper, viewAddress, factory.address, {nonce: nonce + 1, gasLimit: 6000000 * gasMultiplier});
   await deploy('LootboxView', deployer, vrfV2PlusWrapper, factory.address, {nonce: nonce + 2, gasLimit: 3500000 * gasMultiplier});
 
+  await hre.run('deploy-wrapper-factory', { verify });
+
   if (verify === 'true') {
     console.log('Waiting half a minute to start verification');
-    await sleep(30000);
     await hre.run('verify:verify', {
       address: factory.address,
       constructorArguments: [lootboxAddress],
@@ -79,6 +80,31 @@ task('deploy-factory', 'Deploys LootboxFactory')
     await hre.run('verify:verify', {
       address: viewAddress,
       constructorArguments: [vrfV2PlusWrapper, factory.address],
+    });
+  }
+});
+
+task('deploy-wrapper-factory', 'Deploys ERC1155ERC20WrapperFactory')
+.addOptionalParam('verify', 'Verify the deployed factory', 'false', types.bool)
+.setAction(async ({ verify }) => {
+  let [deployer] = await ethers.getSigners();
+  if (process.env.LEDGER_ADDRESS) {
+    console.log(`Using ledger ${process.env.LEDGER_PATH || 'default'} derivation path.`);
+    console.log(`Using ledger ${process.env.LEDGER_ADDRESS} address.`);
+    deployer = new LedgerSigner(ethers.provider, process.env.LEDGER_PATH);
+    deployer.address = process.env.LEDGER_ADDRESS;
+  }
+  console.log('Deployer:', deployer.address);
+  const gasMultiplier = 1;
+
+  const factory = await deploy('ERC1155ERC20WrapperFactory', deployer, {gasLimit: 3000000 * gasMultiplier, gasPrice: '2000000000'});
+
+  if (verify === 'true') {
+    console.log('Waiting half a minute to start verification');
+    await sleep(30000);
+    await hre.run('verify:verify', {
+      address: factory.address,
+      constructorArguments: [],
     });
   }
 });
