@@ -11,17 +11,26 @@ contract ERC1155ERC20Wrapper is ERC1155Base {
   IERC20 public underlying;
   uint256 public totalWrapped;
   bytes32 public constant DO_NOT_UNWRAP = keccak256('DO_NOT_UNWRAP');
+  address private immutable FACTORY;
 
   event Recovery(address caller, IERC20 token, uint256 amount);
 
   error InsufficientBalance();
   error ZeroAddress();
+  error MustNotUnwrap();
+  error OnlyFactory();
 
-  constructor(IERC20 _underlying, address owner) ERC1155Base() {
+  constructor(address factory) ERC1155Base() {
+    FACTORY = factory;
+  }
+
+  function initialize(IERC20 _underlying, address owner) external {
+    if (msg.sender != address(FACTORY)) revert OnlyFactory();
     if (address(_underlying) == address(0)) revert ZeroAddress();
     if (owner == address(0)) revert ZeroAddress();
     _grantRole(DEFAULT_ADMIN_ROLE, owner);
     _grantRole(MINTER_ROLE, owner);
+    _grantRole(MINTER_ROLE, FACTORY);
     _grantRole(PAUSER_ROLE, owner);
     underlying = _underlying;
   }
@@ -30,15 +39,30 @@ contract ERC1155ERC20Wrapper is ERC1155Base {
     public virtual override
   {
     (uint256[] memory ids, uint256[] memory amounts) = asSingletonArrays(id, amount);
-    _wrap(ids, amounts);
+    _wrap(_msgSender(), ids, amounts);
     super.mint(account, id, amount, data);
   }
 
   function mintBatch(address account, uint256[] memory ids, uint256[] memory amounts, bytes memory data)
     public virtual override
   {
-    _wrap(ids, amounts);
+    _wrap(_msgSender(), ids, amounts);
     super.mintBatch(account, ids, amounts, data);
+  }
+
+  function mintBatchAndTransfer(
+    address mintTo,
+    address transferTo,
+    uint256[] memory ids,
+    uint256[] memory amounts,
+    bytes memory data
+  ) external {
+    if (!_isDoNotUnwrap(data)) {
+      revert MustNotUnwrap();
+    }
+    _wrap(mintTo, ids, amounts);
+    super.mintBatch(mintTo, ids, amounts, data);
+    _safeBatchTransferFrom(mintTo, transferTo, ids, amounts, data);
   }
 
   function burn(address account, uint256 id, uint256 amount)
@@ -91,11 +115,12 @@ contract ERC1155ERC20Wrapper is ERC1155Base {
   }
 
   function _wrap(
+    address _from,
     uint256[] memory ids,
     uint256[] memory amounts
   ) private {
     uint256 underlyingAmount = _productsSum(ids, amounts);
-    underlying.safeTransferFrom(_msgSender(), address(this), underlyingAmount);
+    underlying.safeTransferFrom(_from, address(this), underlyingAmount);
     totalWrapped = totalWrapped + underlyingAmount;
   }
 

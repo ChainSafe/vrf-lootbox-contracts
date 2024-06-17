@@ -3259,14 +3259,21 @@ describe('Lootbox', function () {
     const { lootbox, vrfWrapper, vrfCoordinator, MINTER } = await loadFixture(deployLootbox);
     const [owner, supplier, user] = await ethers.getSigners();
     const underlying = await deploy('MockERC20', supplier, 100000);
-    const erc20Wrapper = await deploy('ERC1155ERC20Wrapper', supplier, underlying.address, supplier.address);
-    await underlying.connect(supplier).approve(erc20Wrapper.address, 100000);
-    await erc20Wrapper.connect(supplier).mintBatch(supplier.address, [10, 50, 100], [30, 20, 10], '0x');
+    const erc20WrapperFactory = await deploy('ERC1155ERC20WrapperFactory', supplier);
+    const erc20WrapperCloneAddress = await erc20WrapperFactory.getDeployedAddress(supplier.address, underlying.address);
+    await underlying.connect(supplier).approve(erc20WrapperCloneAddress, 100000);
     await lootbox.mintBatch(user.address, [1, 2], [4, 3], '0x');
-    await lootbox.addTokens([erc20Wrapper.address]);
+    await lootbox.addTokens([erc20WrapperCloneAddress]);
     await lootbox.addSuppliers([supplier.address]);
-    const DO_NOT_UNWRAP = await erc20Wrapper.DO_NOT_UNWRAP();
-    await erc20Wrapper.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [10, 50, 100], [5, 3, 2], DO_NOT_UNWRAP);
+    await erc20WrapperFactory.connect(supplier).deployWrapperWithSetup(
+      underlying.address,
+      supplier.address,
+      lootbox.address,
+      [10, 50, 100],
+      [5, 3, 2],
+    );
+    const erc20Wrapper = await ethers.getContractAt('ERC1155ERC20Wrapper', erc20WrapperCloneAddress);
+    await erc20Wrapper.connect(supplier).mintBatch(supplier.address, [10, 50, 100], [25, 17, 8], '0x');
     let price = await lootbox.calculateOpenPrice(REQUEST_GAS_LIMIT, network.config.gasPrice, 8);
     await lootbox.connect(user).open(REQUEST_GAS_LIMIT, [1, 2], [2, 3], {value: price});
     let requestId = await lootbox.openerRequests(user.address);
