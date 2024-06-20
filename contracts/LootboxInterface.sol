@@ -4,10 +4,10 @@ pragma solidity 0.8.20;
 import {ERC1155Base} from './ERC1155Base.sol';
 import {ERC721Holder} from '@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol';
 import {ERC1155Holder} from '@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol';
-import {VRFV2PlusWrapperConsumerBase} from './deps/VRFV2PlusWrapperConsumerBase.sol';
 import {EnumerableSet} from '@openzeppelin/contracts/utils/structs/EnumerableSet.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+import {IEntropyConsumer} from '@pythnetwork/entropy-sdk-solidity/IEntropyConsumer.sol';
 import {ILootboxFactory} from './interfaces/ILootboxFactory.sol';
 import {RewardInfo} from './Lootbox.sol';
 
@@ -32,7 +32,7 @@ import {RewardInfo} from './Lootbox.sol';
 /// @title Lootbox Interface to combine Lootbox implementation and View contracts.
 /// @author ChainSafe Systems: Oleksii (Functionality) Sneakz (Natspec assistance)
 
-abstract contract LootboxInterface is VRFV2PlusWrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC1155Base {
+abstract contract LootboxInterface is IEntropyConsumer, ERC721Holder, ERC1155Holder, ERC1155Base {
   enum RewardType {
     UNSET,
     ERC20,

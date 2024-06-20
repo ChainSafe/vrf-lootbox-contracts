@@ -11,7 +11,7 @@ import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {EnumerableSet} from '@openzeppelin/contracts/utils/structs/EnumerableSet.sol';
 import {SafeCast} from '@openzeppelin/contracts/utils/math/SafeCast.sol';
 import {Address} from '@openzeppelin/contracts/utils/Address.sol';
-import {IVRFV2PlusWrapper} from './interfaces/IVRFV2PlusWrapper.sol';
+import {IEntropy} from '@pythnetwork/entropy-sdk-solidity/IEntropy.sol';
 import {ERC1155Base} from './ERC1155Base.sol';
 import {ILootboxFactory} from './interfaces/ILootboxFactory.sol';
 
@@ -71,7 +71,6 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155Base {
   }
 
   ILootboxFactory public immutable FACTORY;
-  IVRFV2PlusWrapper public immutable VRF_V2_PLUS_WRAPPER;
 
   uint public unitsSupply; // Supply of units.
   uint public unitsRequested; // Amount of units requested for opening.
@@ -91,8 +90,9 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155Base {
                              VRF RELATED
   //////////////////////////////////////////////////////////////*/
 
-  /// @notice The number of random words to request
-  uint32 private constant NUMWORDS = 1;
+  uint256 private constant ENTROPY_GAS_LIMIT = 500_000;
+
+  address private immutable ENTROPY;
 
   /// @notice The VRF request struct
   struct Request {
@@ -113,14 +113,14 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155Base {
   //////////////////////////////////////////////////////////////*/
 
   /// @notice Deploys a new Lootbox contract with the given parameters.
-  /// @param _vrfV2PlusWrapper The ChainLink VRFV2PlusWrapper contract address.
+  /// @param _pythEntropy The Pyth Entropy contract address.
   /// @param _factory The LootboxFactory contract address.
   constructor(
-    address _vrfV2PlusWrapper,
+    address _pythEntropy,
     address payable _factory
   ) {
     FACTORY = ILootboxFactory(_factory);
-    VRF_V2_PLUS_WRAPPER = IVRFV2PlusWrapper(_vrfV2PlusWrapper);
+    ENTROPY = _pythEntropy;
   }
 
   /*//////////////////////////////////////////////////////////////
@@ -205,13 +205,17 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155Base {
     return suppliers.contains(_from);
   }
 
+  error InsufficientGas();
+
   /// @notice Calculates the opening price of lootboxes.
   /// @param _gas The gas of the request price. Safe estimate is number of reward units multiplied by 100,000 plus 50,000.
-  /// @param _gasPriceInWei The gas price for the opening transaction.
   /// @param _units The units being calculated.
   /// @return uint The VRF price after calculation with units and fees.
-  function calculateOpenPrice(uint32 _gas, uint _gasPriceInWei, uint _units) external view returns (uint) {
-    uint vrfPriceNative = VRF_V2_PLUS_WRAPPER.estimateRequestPriceNative(_gas, NUMWORDS, _gasPriceInWei);
+  function calculateOpenPrice(uint32 _gas, uint /*_gasPriceInWei*/, uint _units) external view returns (uint) {
+    if (_gas > ENTROPY_GAS_LIMIT) revert InsufficientGas();
+    IEntropy entropy = IEntropy(ENTROPY);
+    address provider = entropy.getDefaultProvider();
+    uint vrfPriceNative = entropy.getFee(provider);
     uint feePerUnit = FACTORY.feePerUnit(address(this));
     return vrfPriceNative + (_units * feePerUnit);
   }

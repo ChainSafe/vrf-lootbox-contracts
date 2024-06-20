@@ -29,6 +29,7 @@ const networkConfig = {
     linkToken: '0xb1D4538B4571d411F07960EF2838Ce337FE1E80E',
     vrfV2Wrapper: '0x29576aB8152A09b9DC634804e4aDE73dA1f3a3CC',
     vrfV2PlusWrapper: '0x29576aB8152A09b9DC634804e4aDE73dA1f3a3CC',
+    entropy: '0x549Ebba8036Ab746611B4fFA1423eb0A4Df61440',
   },
   '1': {
     name: 'mainnet',
@@ -41,6 +42,7 @@ const networkConfig = {
     linkHolder: '0xbc1be4cc8790b0c99cff76100e0e6d01e32c6a2c',
     vrfV2Wrapper: '0x29576aB8152A09b9DC634804e4aDE73dA1f3a3CC',
     vrfV2PlusWrapper: '0x29576aB8152A09b9DC634804e4aDE73dA1f3a3CC',
+    entropy: '0x549Ebba8036Ab746611B4fFA1423eb0A4Df61440',
   },
   '250': {
     name: 'fantom',

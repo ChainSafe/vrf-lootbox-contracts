@@ -28,6 +28,7 @@
   "dependencies": {
     "@chainlink/contracts": "^0.6.1",
     "@openzeppelin/contracts": "^5.0.0",
+    "@pythnetwork/entropy-sdk-solidity": "^1.5.0",
     "sort-any": "^4.0.5"
   }
 }

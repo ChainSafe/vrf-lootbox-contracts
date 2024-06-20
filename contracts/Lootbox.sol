@@ -12,7 +12,8 @@ import {EnumerableSet} from '@openzeppelin/contracts/utils/structs/EnumerableSet
 import {SafeCast} from '@openzeppelin/contracts/utils/math/SafeCast.sol';
 import {Address} from '@openzeppelin/contracts/utils/Address.sol';
 import {Multicall} from '@openzeppelin/contracts/utils/Multicall.sol';
-import {VRFV2PlusWrapperConsumerBase} from './deps/VRFV2PlusWrapperConsumerBase.sol';
+import {IEntropyConsumer} from '@pythnetwork/entropy-sdk-solidity/IEntropyConsumer.sol';
+import {IEntropy} from '@pythnetwork/entropy-sdk-solidity/IEntropy.sol';
 import {ERC1155Base} from './ERC1155Base.sol';
 import {ILootboxFactory} from './interfaces/ILootboxFactory.sol';
 import {LootboxInterface} from './LootboxInterface.sol';
@@ -72,7 +73,7 @@ import {LootboxInterface} from './LootboxInterface.sol';
 type RewardInfo is uint248; // 8 bytes unitsAvailable | 23 bytes amountPerUnit
 uint constant UNITS_OFFSET = 8 * 23;
 
-contract Lootbox is VRFV2PlusWrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC1155Base, Multicall {
+contract Lootbox is IEntropyConsumer, ERC721Holder, ERC1155Holder, ERC1155Base, Multicall {
   using SafeERC20 for IERC20;
   using EnumerableSet for EnumerableSet.AddressSet;
   using EnumerableSet for EnumerableSet.UintSet;
@@ -124,11 +125,9 @@ contract Lootbox is VRFV2PlusWrapperConsumerBase, ERC721Holder, ERC1155Holder, E
                              VRF RELATED
   //////////////////////////////////////////////////////////////*/
 
-  /// @notice The number of blocks confirmed before the request is considered fulfilled
-  uint16 private constant REQUEST_CONFIRMATIONS = 3;
+  uint256 private constant ENTROPY_GAS_LIMIT = 500_000;
 
-  /// @notice The number of random words to request
-  uint32 private constant NUMWORDS = 1;
+  address private immutable ENTROPY;
 
   /// @notice The VRF request struct
   struct Request {
@@ -320,14 +319,15 @@ contract Lootbox is VRFV2PlusWrapperConsumerBase, ERC721Holder, ERC1155Holder, E
   //////////////////////////////////////////////////////////////*/
 
   /// @notice Deploys a new Lootbox contract with the given parameters.
-  /// @param _vrfV2PlusWrapper The ChainLink VRFV2PlusWrapper contract address.
+  /// @param _pythEntropy The Pyth Entropy contract address.
   /// @param _view The LootboxView contract address.
   /// @param _factory The LootboxFactory contract address.
   constructor(
-    address _vrfV2PlusWrapper,
+    address _pythEntropy,
     address _view,
     address payable _factory
-  ) VRFV2PlusWrapperConsumerBase(_vrfV2PlusWrapper) {
+  ) {
+    ENTROPY = _pythEntropy;
     FACTORY = ILootboxFactory(_factory);
     VIEW = _view;
   }
@@ -498,7 +498,8 @@ contract Lootbox is VRFV2PlusWrapperConsumerBase, ERC721Holder, ERC1155Holder, E
   /// @param _lootIds Lootbox ids to open
   /// @param _lootAmounts Lootbox amounts to open
   function open(uint32 _gas, uint[] calldata _lootIds, uint[] calldata _lootAmounts) external notEmergency() payable {
-    uint vrfPriceNative = i_vrfV2PlusWrapper.calculateRequestPriceNative(_gas, NUMWORDS);
+    IEntropy entropy = IEntropy(getEntropy());
+    uint vrfPriceNative = entropy.getFee(entropy.getDefaultProvider());
     if (msg.value < vrfPriceNative) revert InsufficientPayment();
     uint payment = msg.value - vrfPriceNative;
     address opener = _msgSender();
@@ -649,20 +650,35 @@ contract Lootbox is VRFV2PlusWrapperConsumerBase, ERC721Holder, ERC1155Holder, E
                               VRF LOGIC
   //////////////////////////////////////////////////////////////*/
 
-  /// @notice Requests randomness from Chainlink VRF.
-  /// @return requestId The ID of the request.
-  function _requestRandomness(uint32 _gas) internal returns (uint256 requestId) {
-    return requestRandomnessPayInNative(
-      _gas,
-      REQUEST_CONFIRMATIONS,
-      NUMWORDS
-    );
+  function getRequestId(address provider, uint64 sequence) internal pure returns (uint256) {
+    return uint256(uint224(bytes28(abi.encodePacked(provider, sequence))));
   }
 
-  /// @inheritdoc VRFV2PlusWrapperConsumerBase
-  function fulfillRandomWords(uint256 requestId, uint256[] memory randomWords) internal override {
-    try this._allocateRewards{gas: gasleft() - 20000}(requestId, randomWords[0]) {
-      emit OpenRequestFulfilled(requestId, randomWords[0]);
+  /// @inheritdoc IEntropyConsumer
+  function getEntropy() internal view override returns (address) {
+    return ENTROPY;
+  }
+
+  /// @notice Requests randomness from Pyth Entropy.
+  /// @return requestId The ID of the request.
+  function _requestRandomness(uint32 _gas) internal returns (uint256 requestId) {
+    if (_gas > ENTROPY_GAS_LIMIT) revert InsufficientGas();
+    IEntropy entropy = IEntropy(getEntropy());
+    address provider = entropy.getDefaultProvider();
+    uint vrfPriceNative = entropy.getFee(provider);
+    uint64 sequence = entropy.requestWithCallback{value: vrfPriceNative}(provider, bytes32(0));
+    return getRequestId(provider, sequence);
+  }
+
+  /// @inheritdoc IEntropyConsumer
+  function entropyCallback(
+        uint64 sequence,
+        address provider,
+        bytes32 randomNumber
+  ) internal override {
+    uint256 requestId = getRequestId(provider, sequence);
+    try this._allocateRewards{gas: gasleft() - 20000}(requestId, uint256(randomNumber)) {
+      emit OpenRequestFulfilled(requestId, uint256(randomNumber));
     } catch (bytes memory reason) {
       Request storage request = requests[requestId];
       unitsRequested = unitsRequested - request.unitsToGet;
