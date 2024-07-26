@@ -64,6 +64,10 @@ const networkConfig = {
     linkToken: '0x404460C6A5EdE2D891e8297795264fDe62ADBB75',
     vrfV2Wrapper: '0x721DFbc5Cfe53d32ab00A9bdFa605d3b8E1f3f42',
   },
+  '1993': {
+    name: 'b3test',
+    entropy: '0x5744Cbf430D99456a0A8771208b674F27f8EF0Fb',
+  },
 };
 
 module.exports = networkConfig;

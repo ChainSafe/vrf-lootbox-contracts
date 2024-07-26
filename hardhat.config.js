@@ -53,7 +53,7 @@ task('deploy-factory', 'Deploys LootboxFactory')
     deployer = new LedgerSigner(ethers.provider, process.env.LEDGER_PATH);
     deployer.address = process.env.LEDGER_ADDRESS;
   }
-  const { linkToken, vrfV2PlusWrapper, name } = networkConfig[chainId];
+  const { entropy, name } = networkConfig[chainId];
 
   // const gasMultiplier = name.includes('arbi') ? 10 : 1;
   const gasMultiplier = 1;
@@ -62,8 +62,8 @@ task('deploy-factory', 'Deploys LootboxFactory')
   const lootboxAddress = ethers.utils.getContractAddress({from: deployer.address, nonce: nonce + 1});
   const viewAddress = ethers.utils.getContractAddress({from: deployer.address, nonce: nonce + 2});
   const factory = await deploy('LootboxFactory', deployer, lootboxAddress, {nonce, gasLimit: 1500000 * gasMultiplier});
-  await deploy('Lootbox', deployer, vrfV2PlusWrapper, viewAddress, factory.address, {nonce: nonce + 1, gasLimit: 6000000 * gasMultiplier});
-  await deploy('LootboxView', deployer, vrfV2PlusWrapper, factory.address, {nonce: nonce + 2, gasLimit: 3500000 * gasMultiplier});
+  await deploy('Lootbox', deployer, entropy, viewAddress, factory.address, {nonce: nonce + 1, gasLimit: 6000000 * gasMultiplier});
+  await deploy('LootboxView', deployer, entropy, factory.address, {nonce: nonce + 2, gasLimit: 3500000 * gasMultiplier});
 
   if (verify === 'true') {
     console.log('Waiting half a minute to start verification');
@@ -74,11 +74,11 @@ task('deploy-factory', 'Deploys LootboxFactory')
     });
     await hre.run('verify:verify', {
       address: lootboxAddress,
-      constructorArguments: [vrfV2PlusWrapper, viewAddress, factory.address],
+      constructorArguments: [entropy, viewAddress, factory.address],
     });
     await hre.run('verify:verify', {
       address: viewAddress,
-      constructorArguments: [vrfV2PlusWrapper, factory.address],
+      constructorArguments: [entropy, factory.address],
     });
   }
 });
@@ -104,34 +104,27 @@ task('deploy-lootbox', 'Deploys an ERC1155 Lootbox through a factory along with 
 .addOptionalParam('factory', 'LootboxFactory address')
 .addOptionalParam('uri', 'Lootbox metadata URI', 'https://bafybeicxxp4o5vxpesym2cvg4cqmxnwhwgpqawhhvxttrz2dlpxjyiob64.ipfs.nftstorage.link/{id}')
 .addOptionalParam('id', 'Lootbox id for contract address predictability', 0, types.int)
-.addOptionalParam('linkamount', 'Amount of LINK to transfer to lootbox', 100, types.int)
-.setAction(async ({ factory, uri, id, linkamount }) => {
+.setAction(async ({ factory, uri, id }) => {
   assert(network.name == 'localhost', 'Only for testing');
   const { chainId } = network.config;
   assert(chainId, 'Missing network configuration!');
 
-  const [deployer, supplier] = await ethers.getSigners();
+  let [deployer, supplier] = await ethers.getSigners();
+  if (!supplier) {
+    supplier = deployer;
+  }
 
-  const { linkToken, linkHolder } = networkConfig[chainId];
-  const link = await ethers.getContractAt('IERC20', linkToken);
   const predictedAddress = ethers.utils.getContractAddress({
     from: deployer.address,
     nonce: 0,
   });
   factory = factory || predictedAddress;
 
-  const impersonatedLinkHolder = await ethers.getImpersonatedSigner(linkHolder);
-  await(await link.connect(impersonatedLinkHolder)
-    .transfer(deployer.address, ethers.utils.parseUnits('1000000'))).wait();
-
   const lootboxFactory = await ethers.getContractAt('LootboxFactory', factory);
   await (await lootboxFactory.deployLootbox(uri, id)).wait();
   const lootboxAddress = await lootboxFactory.getLootbox(deployer.address, id);
 
   console.log('Lootbox deployed to:', lootboxAddress);
-  await(await link.connect(deployer)
-    .transfer(lootboxAddress, ethers.utils.parseUnits(linkamount.toString()))).wait();
-  console.log(`Transferred ${linkamount} LINK to the lootbox contract.`);
 
   const lootbox = await ethers.getContractAt('LootboxInterface', lootboxAddress);
   await (await lootbox.addSuppliers([supplier.address])).wait();
@@ -163,7 +156,10 @@ task('supply-rewards', 'Transfer rewards to the previously deployed lootbox cont
   const { chainId } = network.config;
   assert(chainId, 'Missing network configuration!');
 
-  const [deployer, supplier] = await ethers.getSigners();
+  let [deployer, supplier] = await ethers.getSigners();
+  if (!supplier) {
+    supplier = deployer;
+  }
 
   const predictedAddress = ethers.utils.getContractAddress({
     from: deployer.address,
@@ -592,6 +588,13 @@ module.exports = {
       url: process.env.BSC_URL || '',
       accounts:
         isSet(process.env.BSC_PRIVATE_KEY) ? [process.env.BSC_PRIVATE_KEY] : [],
+      ledgerAccounts: isSet(process.env.LEDGER_ADDRESS) ? [process.env.LEDGER_ADDRESS] : [],
+    },
+    b3test: {
+      chainId: 1993,
+      url: process.env.B3TEST_URL || '',
+      accounts:
+        isSet(process.env.B3TEST_PRIVATE_KEY) ? [process.env.B3TEST_PRIVATE_KEY] : [],
       ledgerAccounts: isSet(process.env.LEDGER_ADDRESS) ? [process.env.LEDGER_ADDRESS] : [],
     },
   },
