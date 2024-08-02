@@ -32,7 +32,7 @@ To deploy to other networks, replace the `mainnet` with the network name from th
     sepolia
     fantomtest
     fuji
-    mumbai
+    amoy
     bsctest
 
 You could optionally set your ETHERSCAN_API key, and use `--verify true` in order to publish the source code after deployemnt. NOTE: Chainlink didn't want to publish the source code yet.

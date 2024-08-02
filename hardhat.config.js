@@ -551,11 +551,11 @@ module.exports = {
       accounts:
         isSet(process.env.FUJI_PRIVATE_KEY) ? [process.env.FUJI_PRIVATE_KEY] : [],
     },
-    mumbai: {
-      chainId: 80001,
-      url: process.env.MUMBAI_URL || '',
+    amoy: {
+      chainId: 80002,
+      url: process.env.AMOY_URL || '',
       accounts:
-        isSet(process.env.MUMBAI_PRIVATE_KEY) ? [process.env.MUMBAI_PRIVATE_KEY] : [],
+        isSet(process.env.AMOY_PRIVATE_KEY) ? [process.env.AMOY_PRIVATE_KEY] : [],
     },
     bsctest: {
       chainId: 97,

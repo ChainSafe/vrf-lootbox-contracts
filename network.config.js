@@ -14,10 +14,10 @@ const networkConfig = {
     linkToken: '0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846',
     vrfV2Wrapper: '0x9345AC54dA4D0B5Cda8CB749d8ef37e5F02BBb21',
   },
-  '80001': {
-    name: 'mumbai',
-    linkToken: '0x326C977E6efc84E512bB9C30f76E30c160eD06FB',
-    vrfV2Wrapper: '0x99aFAf084eBA697E584501b8Ed2c0B37Dd136693',
+  '80002': {
+    name: 'amoy',
+    linkToken: '0x0000000000000000000000000000000000000000',
+    vrfV2Wrapper: '0x0000000000000000000000000000000000000000',
   },
   '97': {
     name: 'bsctest',
