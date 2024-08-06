@@ -108,6 +108,9 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155Base {
   /// @notice The VRF request IDs and their corresponding openers
   mapping(address => uint256) public openerRequests;
 
+  /// @notice The VRF request timestamps by their corresponding openers
+  mapping(address => uint256) private openerRequestTime;
+
   /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
   //////////////////////////////////////////////////////////////*/

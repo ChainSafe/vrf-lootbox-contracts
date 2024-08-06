@@ -127,6 +127,8 @@ contract Lootbox is IEntropyConsumer, ERC721Holder, ERC1155Holder, ERC1155Base, 
 
   uint256 private constant ENTROPY_GAS_LIMIT = 500_000;
 
+  uint256 private constant OPEN_REQUEST_TIMEOUT = 60;
+
   address private immutable ENTROPY;
 
   /// @notice The VRF request struct
@@ -137,11 +139,14 @@ contract Lootbox is IEntropyConsumer, ERC721Holder, ERC1155Holder, ERC1155Base, 
     uint[] lootAmounts;
   }
 
-  /// @notice The VRF request IDs and their corresponding parameters as well as the randomness when fulfilled
+  /// @notice The VRF request parameters by their corresponding IDs
   mapping(uint256 => Request) private requests;
 
-  /// @notice The VRF request IDs and their corresponding openers
+  /// @notice The VRF request IDs by their corresponding openers
   mapping(address => uint256) private openerRequests;
+
+  /// @notice The VRF request timestamps by their corresponding openers
+  mapping(address => uint256) private openerRequestTime;
 
   /*//////////////////////////////////////////////////////////////
                                 EVENTS
@@ -556,15 +561,17 @@ contract Lootbox is IEntropyConsumer, ERC721Holder, ERC1155Holder, ERC1155Base, 
 
   /// @notice Used to recover lootboxes for an address.
   /// @param _opener The address that opened the boxes.
-  function recoverBoxes(address _opener) external {
+  function recoverBoxes(address _opener) public {
     uint requestId = openerRequests[_opener];
     if (requestId == 0) revert NothingToRecover();
     Request storage request = requests[requestId];
-    if (request.unitsToGet > 0) revert PendingOpenRequest(requestId);
+    if (_not(_passed(openerRequestTime[_opener] + OPEN_REQUEST_TIMEOUT))) revert PendingOpenRequest(requestId);
     uint[] memory ids = request.lootIds;
     uint[] memory amounts = request.lootAmounts;
+    unitsRequested = unitsRequested - request.unitsToGet;
     delete requests[requestId];
     delete openerRequests[_opener];
+    delete openerRequestTime[_opener];
     _mintBatch(_opener, ids, amounts, '');
     emit BoxesRecovered(_opener, requestId);
   }
@@ -677,14 +684,8 @@ contract Lootbox is IEntropyConsumer, ERC721Holder, ERC1155Holder, ERC1155Base, 
         bytes32 randomNumber
   ) internal override {
     uint256 requestId = getRequestId(provider, sequence);
-    try this._allocateRewards{gas: gasleft() - 20000}(requestId, uint256(randomNumber)) {
-      emit OpenRequestFulfilled(requestId, uint256(randomNumber));
-    } catch (bytes memory reason) {
-      Request storage request = requests[requestId];
-      unitsRequested = unitsRequested - request.unitsToGet;
-      request.unitsToGet = 0;
-      emit OpenRequestFailed(requestId, reason);
-    }
+    this._allocateRewards(requestId, uint256(randomNumber));
+    emit OpenRequestFulfilled(requestId, uint256(randomNumber));
   }
 
   /*//////////////////////////////////////////////////////////////
@@ -860,7 +861,9 @@ contract Lootbox is IEntropyConsumer, ERC721Holder, ERC1155Holder, ERC1155Base, 
     uint[] memory _lootIds,
     uint[] memory _lootAmounts
   ) internal returns (uint) {
-    if (openerRequests[_opener] != 0) revert PendingOpenRequest(openerRequests[_opener]);
+    if (openerRequests[_opener] != 0) {
+      recoverBoxes(_opener);
+    }
     if (_gas < 100000) revert InsufficientGas();
     _burnBatch(_opener, _lootIds, _lootAmounts);
     uint unitsToGet = 0;
@@ -882,6 +885,7 @@ contract Lootbox is IEntropyConsumer, ERC721Holder, ERC1155Holder, ERC1155Base, 
     request.lootAmounts = _lootAmounts;
 
     openerRequests[_opener] = requestId;
+    openerRequestTime[_opener] = block.timestamp;
 
     emit OpenRequested(_opener, unitsToGet, requestId);
 
@@ -1062,17 +1066,24 @@ contract Lootbox is IEntropyConsumer, ERC721Holder, ERC1155Holder, ERC1155Base, 
 
   /// @notice Checks if reward information is empty.
   /// @param _rewardInfo The reaward information.
-  /// @return RewardInfo Empty reward information.
+  /// @return bool Emptiness of the info.
   function isEmpty(RewardInfo _rewardInfo) internal pure returns (bool) {
     return RewardInfo.unwrap(_rewardInfo) == 0;
   }
 
-  /// @notice Returns value bool.
+  /// @notice Returns !value bool.
   /// @dev Meant to improve readability over the ! operator.
   /// @param _value Boolean value.
   /// @return bool Opposite bool value.
   function _not(bool _value) internal pure returns (bool) {
     return !_value;
+  }
+
+  /// @notice Returns true if the timestamp already passed.
+  /// @param _timestamp Boolean value.
+  /// @return bool Timestamp passed.
+  function _passed(uint256 _timestamp) internal view returns (bool) {
+    return block.timestamp > _timestamp;
   }
 
   function _inc(uint i) internal pure returns (uint) {
