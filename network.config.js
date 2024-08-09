@@ -2,7 +2,8 @@ const networkConfig = {
   '11155111': {
     name: 'sepolia',
     linkToken: '0x779877A7B0D9E8603169DdbD7836e478b4624789',
-    vrfV2Wrapper: '0xab18414CD93297B0d12ac29E63Ca20f515b3DB46',
+    vrfV2Wrapper: '0x195f15F2d49d693cE265b4fB0fdDbE15b1850Cc1',
+    vrfV2PlusWrapper: '0x195f15F2d49d693cE265b4fB0fdDbE15b1850Cc1',
   },
   '4002': {
     name: 'fantomtest',
@@ -12,17 +13,20 @@ const networkConfig = {
   '43113': {
     name: 'fuji',
     linkToken: '0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846',
-    vrfV2Wrapper: '0x9345AC54dA4D0B5Cda8CB749d8ef37e5F02BBb21',
+    vrfV2Wrapper: '0x327B83F409E1D5f13985c6d0584420FA648f1F56',
+    vrfV2PlusWrapper: '0x327B83F409E1D5f13985c6d0584420FA648f1F56',
   },
-  '80001': {
-    name: 'mumbai',
-    linkToken: '0x326C977E6efc84E512bB9C30f76E30c160eD06FB',
-    vrfV2Wrapper: '0x99aFAf084eBA697E584501b8Ed2c0B37Dd136693',
+  '80002': {
+    name: 'amoy',
+    linkToken: '0x0fd9e8d3af1aaee056eb9e802c3a762a667b1904',
+    vrfV2Wrapper: '0x6e6c366a1cd1F92ba87Fd6f96F743B0e6c967Bf0',
+    vrfV2PlusWrapper: '0x6e6c366a1cd1F92ba87Fd6f96F743B0e6c967Bf0',
   },
   '97': {
     name: 'bsctest',
     linkToken: '0x84b9B910527Ad5C03A9Ca831909E21e236EA7b06',
-    vrfV2Wrapper: '0x699d428ee890d55D56d5FC6e26290f3247A762bd',
+    vrfV2Wrapper: '0x471506e6ADED0b9811D05B8cAc8Db25eE839Ac94',
+    vrfV2PlusWrapper: '0x471506e6ADED0b9811D05B8cAc8Db25eE839Ac94',
   },
   '421614': {
     name: 'arbitest',

@@ -46,7 +46,6 @@ task('deploy-factory', 'Deploys LootboxFactory')
   assert(chainId, 'Missing network configuration!');
 
   let [deployer] = await ethers.getSigners();
-  console.log(deployer.address);
   if (process.env.LEDGER_ADDRESS) {
     console.log(`Using ledger ${process.env.LEDGER_PATH || 'default'} derivation path.`);
     console.log(`Using ledger ${process.env.LEDGER_ADDRESS} address.`);
@@ -65,9 +64,10 @@ task('deploy-factory', 'Deploys LootboxFactory')
   await deploy('Lootbox', deployer, entropy, viewAddress, factory.address, {nonce: nonce + 1, gasLimit: 6000000 * gasMultiplier});
   await deploy('LootboxView', deployer, entropy, factory.address, {nonce: nonce + 2, gasLimit: 3500000 * gasMultiplier});
 
+  await hre.run('deploy-wrapper-factory', { verify });
+
   if (verify === 'true') {
     console.log('Waiting half a minute to start verification');
-    await sleep(30000);
     await hre.run('verify:verify', {
       address: factory.address,
       constructorArguments: [lootboxAddress],
@@ -79,6 +79,31 @@ task('deploy-factory', 'Deploys LootboxFactory')
     await hre.run('verify:verify', {
       address: viewAddress,
       constructorArguments: [entropy, factory.address],
+    });
+  }
+});
+
+task('deploy-wrapper-factory', 'Deploys ERC1155ERC20WrapperFactory')
+.addOptionalParam('verify', 'Verify the deployed factory', 'false', types.bool)
+.setAction(async ({ verify }) => {
+  let [deployer] = await ethers.getSigners();
+  if (process.env.LEDGER_ADDRESS) {
+    console.log(`Using ledger ${process.env.LEDGER_PATH || 'default'} derivation path.`);
+    console.log(`Using ledger ${process.env.LEDGER_ADDRESS} address.`);
+    deployer = new LedgerSigner(ethers.provider, process.env.LEDGER_PATH);
+    deployer.address = process.env.LEDGER_ADDRESS;
+  }
+  console.log('Deployer:', deployer.address);
+  const gasMultiplier = 1;
+
+  const factory = await deploy('ERC1155ERC20WrapperFactory', deployer, {gasLimit: 3000000 * gasMultiplier});
+
+  if (verify === 'true') {
+    console.log('Waiting half a minute to start verification');
+    await sleep(30000);
+    await hre.run('verify:verify', {
+      address: factory.address,
+      constructorArguments: [],
     });
   }
 });
@@ -544,11 +569,11 @@ module.exports = {
       accounts:
         isSet(process.env.FUJI_PRIVATE_KEY) ? [process.env.FUJI_PRIVATE_KEY] : [],
     },
-    mumbai: {
-      chainId: 80001,
-      url: process.env.MUMBAI_URL || '',
+    amoy: {
+      chainId: 80002,
+      url: process.env.AMOY_URL || '',
       accounts:
-        isSet(process.env.MUMBAI_PRIVATE_KEY) ? [process.env.MUMBAI_PRIVATE_KEY] : [],
+        isSet(process.env.AMOY_PRIVATE_KEY) ? [process.env.AMOY_PRIVATE_KEY] : [],
     },
     bsctest: {
       chainId: 97,
@@ -604,6 +629,24 @@ module.exports = {
   },
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY,
+    customChains: [
+      {
+        network: "arbitest",
+        chainId: 421614,
+        urls: {
+          apiURL: "https://api-sepolia.arbiscan.io/api",
+          browserURL: "https://sepolia.arbiscan.io"
+        }
+      },
+      {
+        network: "amoy",
+        chainId: 80002,
+        urls: {
+          apiURL: "https://api-amoy.polygonscan.com/api",
+          browserURL: "https://amoy.polygonscan.com"
+        }
+      }
+    ]
   },
   docgen: {
     path: './docs',

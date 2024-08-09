@@ -99,3 +99,7 @@ contract TestnetERC1155NFT is ERC1155 {
     mintTo(msg.sender, _amount);
   }
 }
+
+contract InvalidERC20 {
+  function balanceOf(address) external view {}
+}
