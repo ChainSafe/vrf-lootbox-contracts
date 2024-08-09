@@ -12,13 +12,8 @@ import {EnumerableSet} from '@openzeppelin/contracts/utils/structs/EnumerableSet
 import {SafeCast} from '@openzeppelin/contracts/utils/math/SafeCast.sol';
 import {Address} from '@openzeppelin/contracts/utils/Address.sol';
 import {Multicall} from '@openzeppelin/contracts/utils/Multicall.sol';
-import {VRFCoordinatorV2Interface} from '@chainlink/contracts/src/v0.8/interfaces/VRFCoordinatorV2Interface.sol';
-import {ERC677ReceiverInterface} from '@chainlink/contracts/src/v0.8/interfaces/ERC677ReceiverInterface.sol';
-import {VRFV2WrapperInterface} from '@chainlink/contracts/src/v0.8/interfaces/VRFV2WrapperInterface.sol';
-import {VRFV2WrapperConsumerBase} from '@chainlink/contracts/src/v0.8/VRFV2WrapperConsumerBase.sol';
 import {ERC1155Base} from './ERC1155Base.sol';
 import {ILootboxFactory} from './interfaces/ILootboxFactory.sol';
-import {IVRFV2Wrapper, AggregatorV3Interface} from './interfaces/IVRFV2Wrapper.sol';
 import {LootboxInterface} from './LootboxInterface.sol';
 
 //  $$$$$$\  $$\   $$\  $$$$$$\  $$$$$$\ $$\   $$\  $$$$$$\   $$$$$$\  $$$$$$$$\ $$$$$$$$\ 
@@ -109,7 +104,6 @@ contract Lootbox is ERC721Holder, ERC1155Holder, ERC1155Base, Multicall {
 
   ILootboxFactory private immutable FACTORY;
   address private immutable VIEW;
-  uint private constant LINK_UNIT = 1e18;
 
   uint private unitsSupply; // Supply of units.
   uint private unitsRequested; // Amount of units requested for opening.
@@ -263,9 +257,6 @@ contract Lootbox is ERC721Holder, ERC1155Holder, ERC1155Base, Multicall {
   /// @notice Reward type is immutable
   error ModifiedRewardType(RewardType oldType, RewardType newType);
 
-  /// @notice Only LINK could be sent with an ERC677 call
-  error AcceptingOnlyLINK();
-
   /// @notice Not enough pay for a VRF request or purchase
   error InsufficientPayment();
 
@@ -274,9 +265,6 @@ contract Lootbox is ERC721Holder, ERC1155Holder, ERC1155Base, Multicall {
 
   /// @notice There should be a failed VRF request for recovery
   error NothingToRecover();
-
-  /// @notice LINK price must be positive from an oracle
-  error InvalidLinkPrice(int value);
 
   /// @notice Zero value ERC1155 supplies are not alloved
   error ZeroSupply(address token, uint id);
@@ -334,7 +322,6 @@ contract Lootbox is ERC721Holder, ERC1155Holder, ERC1155Base, Multicall {
   /// @param _view The LootboxView contract address.
   /// @param _factory The LootboxFactory contract address.
   constructor(
-    address /*_link*/,
     address /*_vrfV2Wrapper*/,
     address _view,
     address payable _factory
@@ -668,7 +655,6 @@ contract Lootbox is ERC721Holder, ERC1155Holder, ERC1155Base, Multicall {
   //////////////////////////////////////////////////////////////*/
 
   /// @notice Requests randomness from Chainlink VRF.
-  /// @dev The VRF subscription must be active and sufficient LINK must be available.
   /// @return requestId The ID of the request.
   function _requestRandomness(uint32 /*_gas*/) internal pure returns (uint256 requestId) {
     return 0;
@@ -756,12 +742,6 @@ contract Lootbox is ERC721Holder, ERC1155Holder, ERC1155Base, Multicall {
 
     emit AmountPerUnitSet(_token, _id, _amountPerUnit, newSupply);
     return newSupply;
-  }
-
-  /// @notice Gets LINK price.
-  /// @return uint The link price from wei converted to uint.
-  function _getLinkPrice() internal view returns (uint) {
-    return LootboxInterface(address(this)).getLinkPrice();
   }
 
   /// @notice Allows specific 1155 tokens to be used in the inventory.

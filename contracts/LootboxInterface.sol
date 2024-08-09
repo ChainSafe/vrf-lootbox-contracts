@@ -4,12 +4,10 @@ pragma solidity 0.8.20;
 import {ERC1155Base} from './ERC1155Base.sol';
 import {ERC721Holder} from '@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol';
 import {ERC1155Holder} from '@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol';
-import {VRFV2WrapperConsumerBase} from '@chainlink/contracts/src/v0.8/VRFV2WrapperConsumerBase.sol';
 import {EnumerableSet} from '@openzeppelin/contracts/utils/structs/EnumerableSet.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {ILootboxFactory} from './interfaces/ILootboxFactory.sol';
-import {IVRFV2Wrapper, AggregatorV3Interface} from './interfaces/IVRFV2Wrapper.sol';
 import {RewardInfo} from './Lootbox.sol';
 
 //  $$$$$$\  $$\   $$\  $$$$$$\  $$$$$$\ $$\   $$\  $$$$$$\   $$$$$$\  $$$$$$$$\ $$$$$$$$\ 
@@ -33,7 +31,7 @@ import {RewardInfo} from './Lootbox.sol';
 /// @title Lootbox Interface to combine Lootbox implementation and View contracts.
 /// @author ChainSafe Systems: Oleksii (Functionality) Sneakz (Natspec assistance)
 
-abstract contract LootboxInterface is VRFV2WrapperConsumerBase, ERC721Holder, ERC1155Holder, ERC1155Base {
+abstract contract LootboxInterface is ERC721Holder, ERC1155Holder, ERC1155Base {
   enum RewardType {
     UNSET,
     ERC20,
@@ -55,7 +53,6 @@ abstract contract LootboxInterface is VRFV2WrapperConsumerBase, ERC721Holder, ER
   }
 
   ILootboxFactory public FACTORY;
-  AggregatorV3Interface public LINK_ETH_FEED;
 
   uint public unitsSupply; // Supply of units.
   uint public unitsRequested; // Amount of units requested for opening.
@@ -207,9 +204,6 @@ abstract contract LootboxInterface is VRFV2WrapperConsumerBase, ERC721Holder, ER
   /// @notice Reward type is immutable
   error ModifiedRewardType(RewardType oldType, RewardType newType);
 
-  /// @notice Only LINK could be sent with an ERC677 call
-  error AcceptingOnlyLINK();
-
   /// @notice Not enough pay for a VRF request
   error InsufficientPayment();
 
@@ -218,9 +212,6 @@ abstract contract LootboxInterface is VRFV2WrapperConsumerBase, ERC721Holder, ER
 
   /// @notice There should be a failed VRF request for recovery
   error NothingToRecover();
-
-  /// @notice LINK price must be positive from an oracle
-  error InvalidLinkPrice(int value);
 
   /// @notice Zero value ERC1155 supplies are not alloved
   error ZeroSupply(address token, uint id);
@@ -404,16 +395,6 @@ abstract contract LootboxInterface is VRFV2WrapperConsumerBase, ERC721Holder, ER
   /// @param _opener The address of the user that opened the lootbox.
   /// @return request empty if there are no pending request.
   function getOpenerRequestDetails(address _opener) external virtual view returns (Request memory request);
-
-  /// @notice Gets the LINK token address.
-  /// @return address The address of the LINK token.
-  function getLink() external view virtual returns (address);
-
-  /// @notice Gets the VRF wrapper for the contract.
-  /// @return address The address of the VRF wrapper.
-  function getVRFV2Wrapper() external view virtual returns (address);
-
-  function getLinkPrice() external view virtual returns (uint);
 
   function supportsInterface(bytes4)
     public

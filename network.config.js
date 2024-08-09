@@ -2,7 +2,8 @@ const networkConfig = {
   '11155111': {
     name: 'sepolia',
     linkToken: '0x779877A7B0D9E8603169DdbD7836e478b4624789',
-    vrfV2Wrapper: '0xab18414CD93297B0d12ac29E63Ca20f515b3DB46',
+    vrfV2Wrapper: '0x195f15F2d49d693cE265b4fB0fdDbE15b1850Cc1',
+    vrfV2PlusWrapper: '0x195f15F2d49d693cE265b4fB0fdDbE15b1850Cc1',
   },
   '4002': {
     name: 'fantomtest',
@@ -12,7 +13,8 @@ const networkConfig = {
   '43113': {
     name: 'fuji',
     linkToken: '0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846',
-    vrfV2Wrapper: '0x9345AC54dA4D0B5Cda8CB749d8ef37e5F02BBb21',
+    vrfV2Wrapper: '0x327B83F409E1D5f13985c6d0584420FA648f1F56',
+    vrfV2PlusWrapper: '0x327B83F409E1D5f13985c6d0584420FA648f1F56',
   },
   '80002': {
     name: 'amoy',
@@ -22,12 +24,14 @@ const networkConfig = {
   '97': {
     name: 'bsctest',
     linkToken: '0x84b9B910527Ad5C03A9Ca831909E21e236EA7b06',
-    vrfV2Wrapper: '0x699d428ee890d55D56d5FC6e26290f3247A762bd',
+    vrfV2Wrapper: '0x471506e6ADED0b9811D05B8cAc8Db25eE839Ac94',
+    vrfV2PlusWrapper: '0x471506e6ADED0b9811D05B8cAc8Db25eE839Ac94',
   },
-  '421613': {
+  '421614': {
     name: 'arbitest',
-    linkToken: '0xd14838A68E8AFBAdE5efb411d5871ea0011AFd28',
-    vrfV2Wrapper: '0x674Cda1Fef7b3aA28c535693D658B42424bb7dBD',
+    linkToken: '0xb1D4538B4571d411F07960EF2838Ce337FE1E80E',
+    vrfV2Wrapper: '0x29576aB8152A09b9DC634804e4aDE73dA1f3a3CC',
+    vrfV2PlusWrapper: '0x29576aB8152A09b9DC634804e4aDE73dA1f3a3CC',
   },
   '1': {
     name: 'mainnet',
@@ -36,9 +40,10 @@ const networkConfig = {
   },
   '31337': {
     name: 'hardhat',
-    linkToken: '0x514910771AF9Ca656af840dff83E8264EcF986CA',
-    linkHolder: '0x40B38765696e3d5d8d9d834D8AaD4bB6e418E489',
-    vrfV2Wrapper: '0x5A861794B927983406fCE1D062e00b9368d97Df6',
+    linkToken: '0xb1D4538B4571d411F07960EF2838Ce337FE1E80E',
+    linkHolder: '0xbc1be4cc8790b0c99cff76100e0e6d01e32c6a2c',
+    vrfV2Wrapper: '0x29576aB8152A09b9DC634804e4aDE73dA1f3a3CC',
+    vrfV2PlusWrapper: '0x29576aB8152A09b9DC634804e4aDE73dA1f3a3CC',
   },
   '250': {
     name: 'fantom',

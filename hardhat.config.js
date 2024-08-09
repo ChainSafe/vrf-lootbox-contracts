@@ -52,31 +52,59 @@ task('deploy-factory', 'Deploys LootboxFactory')
     deployer = new LedgerSigner(ethers.provider, process.env.LEDGER_PATH);
     deployer.address = process.env.LEDGER_ADDRESS;
   }
-  const { linkToken, vrfV2Wrapper, name } = networkConfig[chainId];
+  console.log('Deployer:', deployer.address);
+  const { linkToken, vrfV2PlusWrapper, name } = networkConfig[chainId];
 
-  const gasMultiplier = name.includes('arbi') ? 10 : 1;
+  // const gasMultiplier = name.includes('arbi') ? 10 : 1;
+  const gasMultiplier = 1;
 
   const nonce = await ethers.provider.getTransactionCount(deployer.address);
   const lootboxAddress = ethers.utils.getContractAddress({from: deployer.address, nonce: nonce + 1});
   const viewAddress = ethers.utils.getContractAddress({from: deployer.address, nonce: nonce + 2});
-  const factory = await deploy('LootboxFactory', deployer, linkToken, lootboxAddress, {nonce, gasLimit: 1500000 * gasMultiplier});
-  await deploy('Lootbox', deployer, linkToken, vrfV2Wrapper, viewAddress, factory.address, {nonce: nonce + 1, gasLimit: 6000000 * gasMultiplier});
-  await deploy('LootboxView', deployer, linkToken, vrfV2Wrapper, factory.address, {nonce: nonce + 2, gasLimit: 3500000 * gasMultiplier});
+  const factory = await deploy('LootboxFactory', deployer, lootboxAddress, {nonce, gasLimit: 1500000 * gasMultiplier});
+  await deploy('Lootbox', deployer, vrfV2PlusWrapper, viewAddress, factory.address, {nonce: nonce + 1, gasLimit: 6000000 * gasMultiplier});
+  await deploy('LootboxView', deployer, vrfV2PlusWrapper, factory.address, {nonce: nonce + 2, gasLimit: 3500000 * gasMultiplier});
+
+  await hre.run('deploy-wrapper-factory', { verify });
+
+  if (verify === 'true') {
+    console.log('Waiting half a minute to start verification');
+    await hre.run('verify:verify', {
+      address: factory.address,
+      constructorArguments: [lootboxAddress],
+    });
+    await hre.run('verify:verify', {
+      address: lootboxAddress,
+      constructorArguments: [vrfV2PlusWrapper, viewAddress, factory.address],
+    });
+    await hre.run('verify:verify', {
+      address: viewAddress,
+      constructorArguments: [vrfV2PlusWrapper, factory.address],
+    });
+  }
+});
+
+task('deploy-wrapper-factory', 'Deploys ERC1155ERC20WrapperFactory')
+.addOptionalParam('verify', 'Verify the deployed factory', 'false', types.bool)
+.setAction(async ({ verify }) => {
+  let [deployer] = await ethers.getSigners();
+  if (process.env.LEDGER_ADDRESS) {
+    console.log(`Using ledger ${process.env.LEDGER_PATH || 'default'} derivation path.`);
+    console.log(`Using ledger ${process.env.LEDGER_ADDRESS} address.`);
+    deployer = new LedgerSigner(ethers.provider, process.env.LEDGER_PATH);
+    deployer.address = process.env.LEDGER_ADDRESS;
+  }
+  console.log('Deployer:', deployer.address);
+  const gasMultiplier = 1;
+
+  const factory = await deploy('ERC1155ERC20WrapperFactory', deployer, {gasLimit: 3000000 * gasMultiplier});
 
   if (verify === 'true') {
     console.log('Waiting half a minute to start verification');
     await sleep(30000);
     await hre.run('verify:verify', {
       address: factory.address,
-      constructorArguments: [linkToken, lootboxAddress],
-    });
-    await hre.run('verify:verify', {
-      address: lootboxAddress,
-      constructorArguments: [linkToken, vrfV2Wrapper, viewAddress, factory.address],
-    });
-    await hre.run('verify:verify', {
-      address: viewAddress,
-      constructorArguments: [linkToken, vrfV2Wrapper, factory.address],
+      constructorArguments: [],
     });
   }
 });
@@ -506,7 +534,6 @@ module.exports = {
       gas: 20000000,
       forking: {
         url: 'https://cloudflare-eth.com',
-        // url: process.env.CRONOS_TESTNET_URL,
       },
       accounts: [
         {
@@ -564,7 +591,7 @@ module.exports = {
         isSet(process.env.BSCTEST_PRIVATE_KEY) ? [process.env.BSCTEST_PRIVATE_KEY] : [],
     },
     arbitest: {
-      chainId: 421613,
+      chainId: 421614,
       url: process.env.ARBITEST_URL || '',
       accounts:
         isSet(process.env.ARBITEST_PRIVATE_KEY) ? [process.env.ARBITEST_PRIVATE_KEY] : [],
@@ -606,11 +633,29 @@ module.exports = {
     },
   },
   gasReporter: {
-    enabled: isSet(process.env.REPORT_GAS),
+    enabled: process.env.REPORT_GAS == "true",
     currency: 'USD',
   },
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY,
+    customChains: [
+      {
+        network: "arbitest",
+        chainId: 421614,
+        urls: {
+          apiURL: "https://api-sepolia.arbiscan.io/api",
+          browserURL: "https://sepolia.arbiscan.io"
+        }
+      },
+      {
+        network: "amoy",
+        chainId: 80002,
+        urls: {
+          apiURL: "https://api-amoy.polygonscan.com/api",
+          browserURL: "https://amoy.polygonscan.com"
+        }
+      }
+    ]
   },
   docgen: {
     path: './docs',
