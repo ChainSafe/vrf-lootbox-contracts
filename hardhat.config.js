@@ -97,7 +97,7 @@ task('deploy-wrapper-factory', 'Deploys ERC1155ERC20WrapperFactory')
   console.log('Deployer:', deployer.address);
   const gasMultiplier = 1;
 
-  const factory = await deploy('ERC1155ERC20WrapperFactory', deployer, {gasLimit: 3000000 * gasMultiplier, gasPrice: '2000000000'});
+  const factory = await deploy('ERC1155ERC20WrapperFactory', deployer, {gasLimit: 3000000 * gasMultiplier});
 
   if (verify === 'true') {
     console.log('Waiting half a minute to start verification');
