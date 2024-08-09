@@ -71,10 +71,11 @@ describe('Lootbox', function () {
     const erc721 = await deploy('MockERC721', supplier, 20);
     const erc1155 = await deploy('MockERC1155', supplier, 10, 1000);
     const erc1155NFT = await deploy('MockERC1155NFT', supplier, 15);
+    const invalidERC20 = await deploy('InvalidERC20', supplier);
 
     return { factory, lootbox, link, ADMIN, MINTER, PAUSER,
       erc20, erc721, erc1155, erc1155NFT,
-      vrfWrapper, vrfCoordinator, vrfWrapperSigner };
+      vrfWrapper, vrfCoordinator, vrfWrapperSigner, invalidERC20 };
   };
 
   const expectRoleMembers = async (lootbox, role, expected) => {
@@ -293,6 +294,16 @@ describe('Lootbox', function () {
     await lootbox.addTokens([erc20.address, erc721.address, erc1155.address]);
     expect(await lootbox.getAllowedTokens()).to.eql([erc20.address, erc721.address, erc1155.address]);
     expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.UNSET, RewardType.UNSET, RewardType.UNSET]);
+  });
+  it.only('should tolerate invalid tokens in the inventory', async function () {
+    const { lootbox, erc20, erc721, erc1155, invalidERC20 } = await loadFixture(deployLootbox);
+    const [owner, supplier, user] = await ethers.getSigners();
+    await expect(lootbox.addTokens([erc20.address, owner.address, invalidERC20.address]))
+      .to.emit(lootbox, 'TokenAdded')
+      .withArgs(erc20.address);
+    expect(await lootbox.getAllowedTokens()).to.eql([erc20.address, owner.address, invalidERC20.address]);
+    expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.UNSET, RewardType.UNSET, RewardType.UNSET]);
+    await expectInventory(lootbox, [], []);
   });
 
   it('should allow admin to withdraw native currency', async function () {

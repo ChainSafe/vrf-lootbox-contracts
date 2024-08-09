@@ -353,12 +353,18 @@ contract LootboxView is ERC721Holder, ERC1155Holder, ERC1155Base {
   /// @param _token The token being checked.
   /// @return uint erc20 token balance, else 0 if not an erc20 token.
   function tryBalanceOfThis(address _token) internal view returns (uint) {
-    try IERC20(_token).balanceOf(address(this)) returns(uint result) {
+    try this.wrappedBalanceOfThis(_token) returns(uint result) {
       return result;
     } catch {
       // not an ERC20 so has to transfer first.
       return 0;
     }
+  }
+
+  /// @notice This wraps the return data decoding errors along with the call errors.
+  /// @notice try/catch block will not catch decoding errors on its own.
+  function wrappedBalanceOfThis(address _token) external view returns (uint) {
+    return IERC20(_token).balanceOf(address(this));
   }
 
   /// @notice Checks units by by reward information.
