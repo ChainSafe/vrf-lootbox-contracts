@@ -295,7 +295,7 @@ describe('Lootbox', function () {
     expect(await lootbox.getAllowedTokens()).to.eql([erc20.address, erc721.address, erc1155.address]);
     expect(await lootbox.getAllowedTokenTypes()).to.eql([RewardType.UNSET, RewardType.UNSET, RewardType.UNSET]);
   });
-  it.only('should tolerate invalid tokens in the inventory', async function () {
+  it('should tolerate invalid tokens in the inventory', async function () {
     const { lootbox, erc20, erc721, erc1155, invalidERC20 } = await loadFixture(deployLootbox);
     const [owner, supplier, user] = await ethers.getSigners();
     await expect(lootbox.addTokens([erc20.address, owner.address, invalidERC20.address]))
@@ -3310,6 +3310,27 @@ describe('Lootbox', function () {
     expect(await lootbox.unitsSupply()).to.equal(0);
     expect(await lootbox.unitsRequested()).to.equal(0);
     expect(await lootbox.getAvailableSupply()).to.equal(0);
+    // Repeated deploy does not revert.
+    await erc20WrapperFactory.connect(supplier).deployWrapperWithSetup(
+      underlying.address,
+      supplier.address,
+      lootbox.address,
+      [10],
+      [5],
+    );
+    await expectInventory(lootbox, [{
+      rewardToken: erc20Wrapper.address,
+      rewardType: RewardType.ERC1155,
+      units: 5,
+      amountPerUnit: NOT_USED,
+      balance: NOT_USED,
+      extra: [{
+        id: 10,
+        units: 5,
+        amountPerUnit: 1,
+        balance: 5,
+      }],
+    }], []);
   });
 
   it('should restrict calling allocate rewards for not the contract itself', async function () {
