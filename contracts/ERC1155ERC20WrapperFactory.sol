@@ -17,6 +17,10 @@ contract ERC1155ERC20WrapperFactory is Context {
   }
 
   function deployWrapper(IERC20 _underlying, address owner) public returns (address) {
+    address predeployed = getDeployedAddress(_msgSender(), _underlying);
+    if (predeployed.code.length > 0) {
+      return predeployed;
+    }
     address wrapper = WRAPPER.cloneDeterministic(keccak256(abi.encodePacked(_msgSender(), _underlying)));
     ERC1155ERC20Wrapper(wrapper).initialize(_underlying, owner);
     emit Deployed(wrapper, owner);
@@ -37,7 +41,7 @@ contract ERC1155ERC20WrapperFactory is Context {
     return wrapper;
   }
 
-  function getDeployedAddress(address _deployer, IERC20 _underlying) external view returns (address) {
+  function getDeployedAddress(address _deployer, IERC20 _underlying) public view returns (address) {
     return Clones.predictDeterministicAddress(
       WRAPPER,
       keccak256(abi.encodePacked(_deployer, _underlying)),
