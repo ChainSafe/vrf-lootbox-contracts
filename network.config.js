@@ -72,6 +72,10 @@ const networkConfig = {
     name: 'b3test',
     entropy: '0x5744Cbf430D99456a0A8771208b674F27f8EF0Fb',
   },
+  '8333': {
+    name: 'b3',
+    entropy: '0x5744Cbf430D99456a0A8771208b674F27f8EF0Fb',
+  },
 };
 
 module.exports = networkConfig;
