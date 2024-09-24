@@ -532,9 +532,9 @@ module.exports = {
       allowUnlimitedContractSize: true,
       // gasPrice: 100000000000,
       gas: 20000000,
-      forking: {
-        url: 'https://cloudflare-eth.com',
-      },
+      // forking: {
+      //   url: 'https://cloudflare-eth.com',
+      // },
       accounts: [
         {
           privateKey: '57b26bc4bcfd781dcab2fbda189bbf9eb124c7084690571ce185294cbb3d010a',

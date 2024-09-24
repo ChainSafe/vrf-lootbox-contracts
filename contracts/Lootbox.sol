@@ -12,6 +12,7 @@ import {EnumerableSet} from '@openzeppelin/contracts/utils/structs/EnumerableSet
 import {SafeCast} from '@openzeppelin/contracts/utils/math/SafeCast.sol';
 import {Address} from '@openzeppelin/contracts/utils/Address.sol';
 import {Multicall} from '@openzeppelin/contracts/utils/Multicall.sol';
+import {IERC165} from '@openzeppelin/contracts/utils/introspection/IERC165.sol';
 import {ERC1155Base} from './ERC1155Base.sol';
 import {ILootboxFactory} from './interfaces/ILootboxFactory.sol';
 import {LootboxInterface} from './LootboxInterface.sol';
@@ -434,6 +435,12 @@ contract Lootbox is ERC721Holder, ERC1155Holder, ERC1155Base, Multicall {
     uint256 tokenId,
     bytes memory
   ) public override notEmergency() returns (bytes4) {
+    if (_not(_tokenAllowed(msg.sender))) {
+      if (_not(IERC165(msg.sender).supportsInterface(type(IERC721).interfaceId))) {
+        revert TokenDenied(msg.sender);
+      }
+      allowedTokens.add(msg.sender);
+    }
     address token = _validateReceive(from);
     Reward storage reward = rewards[token];
     RewardInfo rewardInfo = reward.rewardInfo;
@@ -462,6 +469,12 @@ contract Lootbox is ERC721Holder, ERC1155Holder, ERC1155Base, Multicall {
     uint256[] memory values,
     bytes memory
   ) public override notEmergency() returns (bytes4) {
+    if (_not(_tokenAllowed(msg.sender))) {
+      if (_not(IERC165(msg.sender).supportsInterface(type(IERC1155).interfaceId))) {
+        revert TokenDenied(msg.sender);
+      }
+      allowedTokens.add(msg.sender);
+    }
     address token = _validateReceive(from);
     uint len = ids.length;
     for (uint i = 0; i < len; i = _inc(i)) {
@@ -482,6 +495,12 @@ contract Lootbox is ERC721Holder, ERC1155Holder, ERC1155Base, Multicall {
     uint256 value,
     bytes memory
   ) public override notEmergency() returns (bytes4) {
+    if (_not(_tokenAllowed(msg.sender))) {
+      if (_not(IERC165(msg.sender).supportsInterface(type(IERC1155).interfaceId))) {
+        revert TokenDenied(msg.sender);
+      }
+      allowedTokens.add(msg.sender);
+    }
     address token = _validateReceive(from);
     _supply1155(token, id, value);
     return this.onERC1155Received.selector;
@@ -979,10 +998,10 @@ contract Lootbox is ERC721Holder, ERC1155Holder, ERC1155Base, Multicall {
     return allowedTokens.contains(_token);
   }
 
-  function _validateReceive(address _from) internal view returns (address) {
+  function _validateReceive(address /*_from*/) internal view returns (address) {
     address token = msg.sender;
     if (_not(_tokenAllowed(token))) revert TokenDenied(token);
-    if (_not(suppliers.contains(_from))) revert SupplyDenied(_from);
+    // if (_not(suppliers.contains(_from))) revert SupplyDenied(_from);
     return token;
   }
 
