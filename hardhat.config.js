@@ -631,6 +631,13 @@ module.exports = {
         isSet(process.env.CRONOS_TESTNET_PRIVATE_KEY) ? [process.env.CRONOS_TESTNET_PRIVATE_KEY] : [],
       ledgerAccounts: isSet(process.env.LEDGER_ADDRESS) ? [process.env.LEDGER_ADDRESS] : [],
     },
+    b3test: {
+      chainId: 1993,
+      url: process.env.B3TEST_URL || "",
+      accounts:
+        isSet(process.env.B3TEST_PRIVATE_KEY) ? [process.env.B3TEST_PRIVATE_KEY] : [],
+      ledgerAccounts: isSet(process.env.LEDGER_ADDRESS) ? [process.env.LEDGER_ADDRESS] : [],
+    },
   },
   gasReporter: {
     enabled: process.env.REPORT_GAS == "true",
@@ -654,7 +661,15 @@ module.exports = {
           apiURL: "https://api-amoy.polygonscan.com/api",
           browserURL: "https://amoy.polygonscan.com"
         }
-      }
+      },
+      {
+        network: "b3test",
+        chainId: 1993,
+        urls: {
+          apiURL: "https://sepolia-explorer.b3.fun/api",
+          browserURL: "https://sepolia.explorer.b3.fun/",
+        }
+      },
     ]
   },
   docgen: {
