@@ -123,6 +123,48 @@ task('transfer-ownership', 'Transfer LootboxFactory ownership')
   console.log(`Ownership transfer: ${tx.hash}`);
 });
 
+task('recover-ownership', 'Recover LootboxFactory ownership from wrong owner')
+.addOptionalParam('verify', 'Verify the deployed Wallet', 'false', types.bool)
+.setAction(async ({ verify }) => {
+  const factory = '0xfa97aCce8E4929e6d13a7c418BfbA0311e9D3Bfd';
+  const to = ''; <<< SET ME >>> // Transfer ownership to this address.
+  const { chainId } = network.config;
+  assert(chainId == 8333, 'Network must be B3 with chainId 8333!');
+
+  let [deployer] = await ethers.getSigners();
+
+  assert(deployer.address == '0xe120A3251a09E753bBa34ac3Fa66b1AF959CD235', 'Deployer must be 0xe120A3251a09E753bBa34ac3Fa66b1AF959CD235.');
+  const nonce = await ethers.provider.getTransactionCount(deployer.address);
+  assert(nonce == 0, 'Current nonce must be 0. Or <= 4. If it is greater than 4 then it is impossible to deploy wallet contract to the correct address.');
+  const lootboxFactory = await ethers.getContractAt('LootboxFactory', factory);
+  const factoryOwner = await lootboxFactory.owner();
+  assert(factoryOwner == '0xbBBcB8148Ba1c9A6edf28bDE16A139614F741dF6', `Unexpected factory owner: ${factoryOwner}.`);
+  const gasPrice = '1100000';
+
+  await deployer.sendTransaction({from: deployer.address, nonce: 0, to: deployer.address, gasPrice});
+  await deployer.sendTransaction({from: deployer.address, nonce: 1, to: deployer.address, gasPrice});
+  await deployer.sendTransaction({from: deployer.address, nonce: 2, to: deployer.address, gasPrice});
+  await deployer.sendTransaction({from: deployer.address, nonce: 3, to: deployer.address, gasPrice});
+
+  const wallet = await deploy('Wallet', deployer, {nonce: 4, gasPrice});
+  assert(wallet.address == factoryOwner, `Wallet deployed to the wrong address ${wallet.address}.`);
+
+  const txData = await lootboxFactory.populateTransaction.transferOwnership(to);
+  const tx = await wallet.forward(factory, 0, txData.data, {gasLimit: 100000, gasPrice});
+  await tx.wait();
+  console.log(`Ownership transfer: ${tx.hash}`);
+  assert(await lootboxFactory.owner() == to, 'Ownership hange failed!');
+
+  if (verify === 'true') {
+    console.log('Waiting half a minute to start verification');
+    await sleep(30000);
+    await hre.run('verify:verify', {
+      address: wallet.address,
+      constructorArguments: [],
+    });
+  }
+});
+
 // All the following tasks are for testing and development purpuses only.
 
 task('deploy-lootbox', 'Deploys an ERC1155 Lootbox through a factory along with the reward tokens')
@@ -528,7 +570,7 @@ module.exports = {
       gasPrice: 100000000000,
       gas: 20000000,
       forking: {
-        url: process.env.ARBITEST_URL,
+        url: process.env.B3_URL,
       },
       accounts: [
         {
