@@ -435,12 +435,6 @@ contract Lootbox is ERC721Holder, ERC1155Holder, ERC1155Base, Multicall {
     uint256 tokenId,
     bytes memory
   ) public override notEmergency() returns (bytes4) {
-    if (_not(_tokenAllowed(msg.sender))) {
-      if (_not(IERC165(msg.sender).supportsInterface(type(IERC721).interfaceId))) {
-        revert TokenDenied(msg.sender);
-      }
-      allowedTokens.add(msg.sender);
-    }
     address token = _validateReceive(from);
     Reward storage reward = rewards[token];
     RewardInfo rewardInfo = reward.rewardInfo;
@@ -469,12 +463,6 @@ contract Lootbox is ERC721Holder, ERC1155Holder, ERC1155Base, Multicall {
     uint256[] memory values,
     bytes memory
   ) public override notEmergency() returns (bytes4) {
-    if (_not(_tokenAllowed(msg.sender))) {
-      if (_not(IERC165(msg.sender).supportsInterface(type(IERC1155).interfaceId))) {
-        revert TokenDenied(msg.sender);
-      }
-      allowedTokens.add(msg.sender);
-    }
     address token = _validateReceive(from);
     uint len = ids.length;
     for (uint i = 0; i < len; i = _inc(i)) {
@@ -495,12 +483,6 @@ contract Lootbox is ERC721Holder, ERC1155Holder, ERC1155Base, Multicall {
     uint256 value,
     bytes memory
   ) public override notEmergency() returns (bytes4) {
-    if (_not(_tokenAllowed(msg.sender))) {
-      if (_not(IERC165(msg.sender).supportsInterface(type(IERC1155).interfaceId))) {
-        revert TokenDenied(msg.sender);
-      }
-      allowedTokens.add(msg.sender);
-    }
     address token = _validateReceive(from);
     _supply1155(token, id, value);
     return this.onERC1155Received.selector;
