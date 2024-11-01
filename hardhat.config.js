@@ -638,6 +638,13 @@ module.exports = {
         isSet(process.env.B3TEST_PRIVATE_KEY) ? [process.env.B3TEST_PRIVATE_KEY] : [],
       ledgerAccounts: isSet(process.env.LEDGER_ADDRESS) ? [process.env.LEDGER_ADDRESS] : [],
     },
+    b3: {
+      chainId: 8333,
+      url: process.env.B3_URL || "",
+      accounts:
+        isSet(process.env.B3_PRIVATE_KEY) ? [process.env.B3_PRIVATE_KEY] : [],
+      ledgerAccounts: isSet(process.env.LEDGER_ADDRESS) ? [process.env.LEDGER_ADDRESS] : [],
+    },
   },
   gasReporter: {
     enabled: process.env.REPORT_GAS == "true",
