@@ -677,6 +677,14 @@ module.exports = {
           browserURL: "https://sepolia.explorer.b3.fun/",
         }
       },
+      {
+        network: "b3",
+        chainId: 8333,
+        urls: {
+          apiURL: "https://explorer.b3.fun/api",
+          browserURL: "https://explorer.b3.fun/",
+        }
+      },
     ]
   },
   docgen: {
