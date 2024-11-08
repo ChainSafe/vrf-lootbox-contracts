@@ -2590,20 +2590,20 @@ describe('Lootbox', function () {
     await erc20.connect(supplier).transfer(lootbox.address, 100);
     await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 0);
     await erc721.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 1);
-    await erc1155NFT.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [2, 3], [1, 1], '0x');
+    await erc1155NFT.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [2], [1], '0x');
     await erc1155.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [4, 5], [30, 50], '0x');
     await erc20extra.connect(supplier).transfer(lootbox.address, 100);
     await erc721extra.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 0);
     await erc721extra.connect(supplier)[safeTransferFrom](supplier.address, lootbox.address, 1);
-    await erc1155NFTextra.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [2, 3], [1, 1], '0x');
+    await erc1155NFTextra.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [2], [1], '0x');
     await erc1155extra.connect(supplier).safeBatchTransferFrom(supplier.address, lootbox.address, [4, 5], [30, 50], '0x');
     await lootbox.setAmountsPerUnit(
       [erc20.address, erc721.address, erc1155NFT.address, erc1155.address, erc1155.address],
-      [0, 0, 0, 4, 5], [25, 2, 2, 15, 25]
+      [0, 0, 2, 4, 5], [25, 2, 1, 15, 25]
     );
     await lootbox.setAmountsPerUnit(
       [erc20extra.address, erc721extra.address, erc1155NFTextra.address],
-      [0, 0, 0], [0, 0, 0]
+      [0, 0, 2], [0, 0, 0]
     );
     await lootbox.setAmountsPerUnit(
       [erc1155extra.address, erc1155extra.address],
@@ -2639,11 +2639,16 @@ describe('Lootbox', function () {
       extra: [NFT(0), NFT(1)],
     }, {
       rewardToken: erc1155NFT.address,
-      rewardType: RewardType.ERC1155NFT,
+      rewardType: RewardType.ERC1155,
       units: 1,
-      amountPerUnit: 2,
+      amountPerUnit: 0,
       balance: NOT_USED,
-      extra: [NFT(2), NFT(3)],
+      extra: [{
+        id: 2,
+        units: 1,
+        amountPerUnit: 1,
+        balance: 1,
+      }],
     }, {
       rewardToken: erc1155.address,
       rewardType: RewardType.ERC1155,
@@ -2677,11 +2682,16 @@ describe('Lootbox', function () {
       extra: [NFT(0), NFT(1)],
     }, {
       rewardToken: erc1155NFTextra.address,
-      rewardType: RewardType.ERC1155NFT,
-      units: NOT_USED,
+      rewardType: RewardType.ERC1155,
+      units: 0,
       amountPerUnit: 0,
       balance: NOT_USED,
-      extra: [NFT(2), NFT(3)],
+      extra: [{
+        id: 2,
+        units: 0,
+        amountPerUnit: 0,
+        balance: 1,
+      }],
     }, {
       rewardToken: erc1155extra.address,
       rewardType: RewardType.ERC1155,
@@ -2715,7 +2725,6 @@ describe('Lootbox', function () {
       ['Allocated', user.address, erc1155.address, 5, 25],
       ['Allocated', user.address, erc20.address, 0, 25],
       ['Allocated', user.address, erc1155NFT.address, 2, 1],
-      ['Allocated', user.address, erc1155NFT.address, 3, 1],
       ['Allocated', user.address, erc721.address, 1, 1],
       ['Allocated', user.address, erc721.address, 0, 1],
       ['Allocated', user.address, erc20.address, 0, 25],
@@ -2723,7 +2732,6 @@ describe('Lootbox', function () {
       ['RewardsClaimed', user.address, erc20.address, 0, 50],
       ['RewardsClaimed', user.address, erc721.address, 0, 1],
       ['RewardsClaimed', user.address, erc721.address, 1, 1],
-      ['RewardsClaimed', user.address, erc1155NFT.address, 3, 1],
       ['RewardsClaimed', user.address, erc1155NFT.address, 2, 1],
       ['RewardsClaimed', user.address, erc1155.address, 5, 50],
       ['RewardsClaimed', user.address, erc1155.address, 4, 15],
@@ -2731,7 +2739,6 @@ describe('Lootbox', function () {
     expect(await erc20.balanceOf(user2.address)).to.equal(100);
     expect(await erc1155.balanceOf(user2.address, 5)).to.equal(50);
     expect(await erc1155.balanceOf(user2.address, 4)).to.equal(30);
-    expect(await erc1155NFT.balanceOf(user2.address, 3)).to.equal(1);
     expect(await erc1155NFT.balanceOf(user2.address, 2)).to.equal(1);
     expect(await erc721.ownerOf(0)).to.equal(user2.address);
     expect(await erc721.ownerOf(1)).to.equal(user2.address);
@@ -2751,11 +2758,16 @@ describe('Lootbox', function () {
       extra: [NFT(0), NFT(1)],
     }, {
       rewardToken: erc1155NFTextra.address,
-      rewardType: RewardType.ERC1155NFT,
-      units: NOT_USED,
+      rewardType: RewardType.ERC1155,
+      units: 0,
       amountPerUnit: 0,
       balance: NOT_USED,
-      extra: [NFT(2), NFT(3)],
+      extra: [{
+        id: 2,
+        units: 0,
+        amountPerUnit: 0,
+        balance: 1,
+      }],
     }, {
       rewardToken: erc1155extra.address,
       rewardType: RewardType.ERC1155,

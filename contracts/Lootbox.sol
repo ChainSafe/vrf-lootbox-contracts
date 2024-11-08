@@ -756,14 +756,8 @@ contract Lootbox is ERC721Holder, ERC1155Holder, ERC1155Base, Multicall {
     RewardType rewardType = reward.rewardType;
     bool isFirstTime = rewardType == RewardType.UNSET;
     if (isFirstTime) {
-      if (value == 1) {
-        // If the value is 1, then we assume token to be distributed as NFT.
-        rewardInfo = toInfo(0, 1);
-        reward.rewardInfo = rewardInfo;
-        rewardType = RewardType.ERC1155NFT;
-      } else {
-        rewardType = RewardType.ERC1155;
-      }
+      // Treat all ERC1155 as fungible!
+      rewardType = RewardType.ERC1155;
       reward.rewardType = rewardType;
     } else if (rewardType != RewardType.ERC1155 && rewardType != RewardType.ERC1155NFT) {
       revert ModifiedRewardType(reward.rewardType, RewardType.ERC1155);
